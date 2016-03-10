@@ -1,0 +1,180 @@
+#[derive(Debug, Clone, PartialEq)]
+pub enum Event
+{
+    Keyboard(EvState, Key),
+    MouseButton(EvState, Button, (f64, f64)),
+    MouseMoved(f64, f64),
+    AxisMoved(AxisState),
+    PointerInside(bool),
+    Resized(u32, u32),
+    Moved(i32, i32),
+    Focused(bool),
+    Redraw,
+    CloseButton,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Button
+{
+    Left,
+    Middle,
+    Right,
+    Other(u8),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum EvState
+{
+    Pressed,
+    Released,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum AxisState
+{
+    Scroll(f64, f64),
+    Pressure(f64),
+    Tilt(f64, f64),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Key
+{
+    // main numbers
+    Key0,
+    Key1,
+    Key2,
+    Key3,
+    Key4,
+    Key5,
+    Key6,
+    Key7,
+    Key8,
+    Key9,
+    // alphabet
+    A,
+    B,
+    C,
+    D,
+    E,
+    F,
+    G,
+    H,
+    I,
+    J,
+    K,
+    L,
+    M,
+    N,
+    O,
+    P,
+    Q,
+    R,
+    S,
+    T,
+    U,
+    V,
+    W,
+    X,
+    Y,
+    Z,
+    // function keys
+    F1,
+    F2,
+    F3,
+    F4,
+    F5,
+    F6,
+    F7,
+    F8,
+    F9,
+    F10,
+    F11,
+    F12,
+    // main control keys
+    Escape,
+    BackSpace,
+    Tab,
+    Return,
+    CapsLock,
+    ShiftLeft,
+    ShiftRight,
+    ControlLeft,
+    ControlRight,
+    AltLeft,
+    AltRight,
+    SuperLeft,
+    SuperRight,
+    Space,
+    // secondary control keys
+    Print,
+    ScrollLock,
+    Pause,
+    Insert,
+    Delete,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+    // arrow keys
+    Up,
+    Down,
+    Right,
+    Left,
+    // numpad numbers
+    Numpad0,
+    Numpad1,
+    Numpad2,
+    Numpad3,
+    Numpad4,
+    Numpad5,
+    Numpad6,
+    Numpad7,
+    Numpad8,
+    Numpad9,
+    // numpad other
+    NumLock,
+    NumpadDelete,
+    NumpadAdd,
+    NumpadSubtract,
+    NumpadMultiply,
+    NumpadDivide,
+    NumpadEnter,
+    // misc international
+    Numbersign,
+    Apostrophe,
+    Plus,
+    Comma,
+    Minus,
+    Period,
+    Slash,
+    Semicolon,
+    Less,
+    Equal,
+    BracketLeft,
+    BackSlash,
+    BracketRight,
+    Grave,
+    BraceLeft,
+    Bar,
+    BraceRight,
+    ExclamDown,
+    GuillemotLeft,
+    Masculine,
+    QuestionDown,
+    AGrave,
+    CCedilla,
+    EGrave,
+    EAcute,
+    IGrave,
+    NTilde,
+    OGrave,
+    UGrave,
+    DeadGrave,
+    DeadAcute,
+    DeadCircumflex,
+    DeadTilde,
+    DeadCedilla,
+    // there are lots more, but this is enough for most layouts
+    Unk(u32)
+}
