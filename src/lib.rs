@@ -107,7 +107,7 @@ fn convert_keysym(keysym: u32) -> Key
         keysym::XK_Super_R => Key::SuperRight,
         keysym::XK_Meta_L => Key::MetaLeft, // Mac's ⌘ key
         keysym::XK_Meta_R => Key::MetaRight,
-        keysym::XK_Mode_switch => Key::ModeSwitch,  // Mac's Alt key
+        keysym::XK_Mode_switch => Key::ModeSwitch,  // Mac's ⌥ key
         keysym::XK_space => Key::Space,
 
         keysym::XK_Print => Key::Print,
