@@ -105,6 +105,9 @@ pub enum Key
     AltRight,
     SuperLeft,
     SuperRight,
+    MetaLeft,
+    MetaRight,
+    ModeSwitch,
     Space,
     // secondary control keys
     Print,
