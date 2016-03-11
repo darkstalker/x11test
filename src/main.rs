@@ -29,9 +29,9 @@ fn main()
                     others.push((n, win));
                     n += 1;
                 },
-                /*Event::Keyboard(KeyState::Pressed, 9) => {
-                    x11test::stuff::enumerate_devices(display.handle);  // debug stuff
-                }*/
+                /*Event::Keyboard(EvState::Pressed, Key::F1) => {
+                    println!("{:?}", display.devices.borrow()); // debug stuff
+                },*/
                 Event::Keyboard(EvState::Pressed, Key::Unk(ks)) => {
                     println!("** keysym: {:x}", ks);
                 },

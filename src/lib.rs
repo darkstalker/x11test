@@ -226,6 +226,14 @@ struct AxisData
     value: f64,
 }
 
+#[derive(Debug, Default)]
+struct DeviceInfo
+{
+    axis_info: HashMap<i32 /* axis_num */, AxisData>,
+    num_axis: i32,
+    has_scroll: bool,
+}
+
 #[repr(C)]
 struct AtomCache
 {
@@ -238,9 +246,9 @@ struct AtomCache
 
 pub struct XDisplay
 {
-    pub handle: *mut xlib::Display,
+    handle: *mut xlib::Display,
     win_data: RefCell<HashMap<xlib::Window, Weak<WindowData>>>,
-    axis_info: RefCell<HashMap<(i32 /* source_id */, i32 /* axis_num */), AxisData>>,
+    devices: RefCell<HashMap<i32 /* device_id */, DeviceInfo>>,
     pointer_pos: Cell<(f64, f64)>,
     atoms: AtomCache,
 }
@@ -259,7 +267,7 @@ impl XDisplay
         let mut xdis = XDisplay{
             handle: display,
             win_data: Default::default(),
-            axis_info: Default::default(),
+            devices: Default::default(),
             pointer_pos: Cell::new((-1.0, -1.0)),
             atoms: unsafe { mem::zeroed() },
         };
@@ -314,7 +322,6 @@ impl XDisplay
 
         // load device info
         xdis.load_axis_info(xinput2::XIAllDevices);
-        println!("{:?}", xdis.axis_info);
 
         Ok(xdis)
     }
@@ -359,8 +366,6 @@ impl XDisplay
 
             // init XInput events
             let mut mask = [0];
-            //xinput2::XISetMask(&mut mask, xinput2::XI_KeyPress);
-            //xinput2::XISetMask(&mut mask, xinput2::XI_KeyRelease);
             xinput2::XISetMask(&mut mask, xinput2::XI_ButtonPress);
             xinput2::XISetMask(&mut mask, xinput2::XI_ButtonRelease);
             xinput2::XISetMask(&mut mask, xinput2::XI_Motion);
@@ -435,6 +440,8 @@ impl XDisplay
                 if ev.mode == xlib::NotifyNormal ||
                   (ev.mode == xlib::NotifyUngrab && ev.detail == xlib::NotifyNonlinear)
                 {
+                    // if the mouse has been outside, we need to reload the absolute value of the scroll axis
+                    self.reload_scroll_values();
                     (ev.window, ParsedEvent::One(Event::PointerInside(true)))
                 }
                 else { (ev.window, ParsedEvent::None) }
@@ -559,15 +566,16 @@ impl XDisplay
                 let (mut tilt_x_changed, mut tilt_y_changed) = (false, false);
                 let (mut tilt_x, mut tilt_y) = (0.0, 0.0);
 
-                let mut ax_info = self.axis_info.borrow_mut();
+                let mut devices = self.devices.borrow_mut();
+                let dev_info = devices.get_mut(&ev_data.sourceid).unwrap();
 
                 let mut cur_offset = 0;
-                for axis_id in 0 .. axis_state.mask_len  // probably not the correct length
+                for axis_id in 0 .. dev_info.num_axis
                 {
                     if xinput2::XIMaskIsSet(&axis_mask, axis_id)
                     {
                         let axis_value = unsafe { *axis_state.values.offset(cur_offset) };
-                        if let Some(axis_info) = ax_info.get_mut(&(ev_data.sourceid, axis_id))
+                        if let Some(axis_info) = dev_info.axis_info.get_mut(&axis_id)
                         {
                             match axis_info.axis_type {
                                 AxisType::ScrollVertical(incr) => if axis_info.value != axis_value
@@ -656,10 +664,8 @@ impl XDisplay
                             }
                             else if info.flags & xinput2::XIDeviceDisabled != 0
                             {
+                                self.devices.borrow_mut().remove(&info.deviceid);
                                 println!("** removed device: {}", info.deviceid);
-                                //TODO: remove from hash.
-                                //currently can't with hashmap, maybe change de data structure? (BtreeMap)
-                                //and use something like drain_range (when it's implemented..)
                             }
                         }
                     }
@@ -685,6 +691,7 @@ impl XDisplay
                 println!("-- device {}", dev.deviceid);
 
                 let mut values = vec![0.0; dev.num_classes as usize];
+                let mut has_scroll = false;
 
                 for i in 0 .. dev.num_classes as isize
                 {
@@ -710,6 +717,7 @@ impl XDisplay
                         xinput2::XIScrollClass => {
                             let ci: &xinput2::XIScrollClassInfo = unsafe { mem::transmute(class) };
                             println!("scroll {}: type={} incr={} flags={}", ci.number, ci.scroll_type, ci.increment, ci.flags);
+                            has_scroll = true;
                             // ... and use them here to fill in the scroll classes
                             match ci.scroll_type {
                                 xinput2::XIScrollTypeVertical => {
@@ -724,12 +732,32 @@ impl XDisplay
                         _ => continue
                     };
 
-                    self.axis_info.borrow_mut().insert((dev.deviceid, ax_num), ax_data);
+                    let mut devices = self.devices.borrow_mut();
+                    let dev_info = devices.entry(dev.deviceid).or_insert_with(|| Default::default());
+                    dev_info.axis_info.insert(ax_num, ax_data);
+                    dev_info.has_scroll = has_scroll;
+                    // store the highest axis id we need to read from events
+                    if ax_num + 1 > dev_info.num_axis
+                    {
+                        dev_info.num_axis = ax_num + 1;
+                    }
                 }
             }
         }
 
         unsafe{ xinput2::XIFreeDeviceInfo(devices_ptr); }
+    }
+
+    fn reload_scroll_values(&self)
+    {
+        let scroll_devs: Vec<_> = self.devices.borrow().iter()
+            .filter(|&(_, info)| info.has_scroll)
+            .map(|(&dev, _)| dev).collect();
+
+        for dev_id in scroll_devs
+        {
+            self.load_axis_info(dev_id);
+        }
     }
 
     fn scancode_to_key(&self, keycode: xlib::KeyCode) -> Key
