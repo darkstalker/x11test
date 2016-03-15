@@ -1,5 +1,5 @@
 extern crate x11test;
-use x11test::{XDisplay, Event, EvState, Key};
+use x11test::{XDisplay, Event, EvState, Key, Button};
 
 fn main()
 {
@@ -11,6 +11,7 @@ fn main()
 
     let mut others = Vec::new();
     let mut n = 1;
+    let mut mdown = false;
 
     'main: loop
     {
@@ -29,11 +30,18 @@ fn main()
                     others.push((n, win));
                     n += 1;
                 },
-                /*Event::Keyboard(EvState::Pressed, Key::F1) => {
-                    println!("{:?}", display.devices.borrow()); // debug stuff
-                },*/
                 Event::Keyboard(EvState::Pressed, Key::Unk(ks)) => {
                     println!("** keysym: {:x}", ks);
+                },
+                Event::MouseButton(EvState::Pressed, Button::Left, (x, y)) => {
+                    mdown = true;
+                    window.draw_rect(x as i32 - 5, y as i32 - 5, 10, 10, (0xffff, 0, 0, 0xffff));
+                },
+                Event::MouseButton(EvState::Released, Button::Left, _) => {
+                    mdown = false;
+                },
+                Event::MouseMoved(x, y) if mdown => {
+                    window.draw_rect(x as i32 - 5, y as i32 - 5, 10, 10, (0xffff, 0, 0, 0xffff));
                 },
                 _ => println!(">> main: {:?}", ev)
             }

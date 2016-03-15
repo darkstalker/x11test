@@ -4,4 +4,4 @@ version = "0.1.0"
 authors = ["darkstalker <slayerbeast@gmail.com>"]
 
 [dependencies]
-x11 = { version = "2.3.1", features = ["xlib", "xinput"] }
+x11 = { version = "2.3.1", features = ["xlib", "xinput", "xrender"] }

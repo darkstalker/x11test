@@ -1,7 +1,7 @@
 extern crate x11;
 pub mod event;
 
-use x11::{xlib, xinput2, keysym};
+use x11::{xlib, xinput2, xrender, keysym};
 use std::{mem, slice};
 use std::ptr::{null, null_mut};
 use std::ffi::CString;
@@ -301,6 +301,14 @@ impl XDisplay
             return Err("XInput2 not available")
         }
 
+        // query for XRender support
+        let mut xr_event = 0;
+        let mut xr_error = 0;
+        if unsafe { xrender::XRenderQueryExtension(display, &mut xr_event, &mut xr_error) } == xlib::False
+        {
+            return Err("XRender extension not available")
+        }
+
         // enable XInput hierarchy events
         let mut mask = [0; 2];
         xinput2::XISetMask(&mut mask, xinput2::XI_HierarchyChanged);
@@ -328,9 +336,10 @@ impl XDisplay
 
     pub fn create_window(&self, width: u32, height: u32) -> Result<XWindow, &'static str>
     {
-        let win_id = unsafe {
+        let (win_id, pic_id) = unsafe {
             let screen_num = xlib::XDefaultScreen(self.handle);
             let root_win = xlib::XRootWindow(self.handle, screen_num);
+            let visual = xlib::XDefaultVisual(self.handle, screen_num);
             let black_pixel = xlib::XBlackPixel(self.handle, screen_num);
 
             let mut win_attr = xlib::XSetWindowAttributes{
@@ -382,7 +391,11 @@ impl XDisplay
                 return Err("Failed to select XInput2 events")
             }
 
-            win_id
+            let fmt = xrender::XRenderFindVisualFormat(self.handle, visual);
+            //let pic_attr: xrender::XRenderPictureAttributes = mem::zeroed();
+            let pic_id = xrender::XRenderCreatePicture(self.handle, win_id, fmt, 0, null());
+
+            (win_id, pic_id)
         };
 
         let data = Default::default();
@@ -391,6 +404,7 @@ impl XDisplay
         Ok(XWindow{
             display: self,
             handle: win_id,
+            picture: pic_id,
             data: data,
         })
     }
@@ -804,6 +818,7 @@ pub struct XWindow<'a>
 {
     display: &'a XDisplay,
     handle: xlib::Window,
+    picture: xrender::Picture,
     data: Rc<WindowData>,
 }
 
@@ -834,12 +849,23 @@ impl<'a> XWindow<'a>
     {
         self.data.ev_queue.borrow_mut().pop_front()
     }
+
+    // probably should make a context object for drawing
+    pub fn draw_rect(&self, x: i32, y: i32, width: u32, height: u32, (r, g, b, a): (u16, u16, u16, u16))
+    {
+        let color = xrender::XRenderColor{ red: r, green: g, blue: b, alpha: a };
+        unsafe{ xrender::XRenderFillRectangle(self.display.handle, /*PictOpOver*/ 3, self.picture, &color, x, y, width, height); }
+    }
 }
 
 impl<'a> Drop for XWindow<'a>
 {
     fn drop(&mut self)
     {
-        unsafe{ xlib::XDestroyWindow(self.display.handle, self.handle); }
+        unsafe
+        {
+            xrender::XRenderFreePicture(self.display.handle, self.picture);
+            xlib::XDestroyWindow(self.display.handle, self.handle);
+        }
     }
 }
