@@ -336,77 +336,7 @@ impl XDisplay
 
     pub fn create_window(&self, width: u32, height: u32) -> Result<XWindow, &'static str>
     {
-        let (win_id, pic_id) = unsafe {
-            let screen_num = xlib::XDefaultScreen(self.handle);
-            let root_win = xlib::XRootWindow(self.handle, screen_num);
-            let visual = xlib::XDefaultVisual(self.handle, screen_num);
-            let black_pixel = xlib::XBlackPixel(self.handle, screen_num);
-
-            let mut win_attr = xlib::XSetWindowAttributes{
-                background_pixel: black_pixel,
-                event_mask: xlib::KeyPressMask |
-                            xlib::KeyReleaseMask |
-                            xlib::EnterWindowMask |
-                            xlib::LeaveWindowMask |
-                            xlib::ExposureMask |
-                            xlib::StructureNotifyMask |
-                            xlib::FocusChangeMask,
-                .. mem::zeroed()
-            };
-
-            let win_id = xlib::XCreateWindow(self.handle,
-                root_win,       // parent
-                0, 0,           // x, y
-                width, height,
-                0,              // border width
-                xlib::CopyFromParent,       // depth
-                xlib::InputOutput as u32,   // input class
-                null_mut(),                 // visual
-                xlib::CWBackPixel | xlib::CWEventMask, // value mask
-                &mut win_attr);
-
-            // suscribe to WM close event
-            let mut protocols = [self.atoms.wm_delete_window];
-            if xlib::XSetWMProtocols(self.handle, win_id, &mut protocols[0], protocols.len() as i32) == xlib::False
-            {
-                xlib::XDestroyWindow(self.handle, win_id);
-                return Err("can't set WM protocols");
-            }
-
-            // init XInput events
-            let mut mask = [0];
-            xinput2::XISetMask(&mut mask, xinput2::XI_ButtonPress);
-            xinput2::XISetMask(&mut mask, xinput2::XI_ButtonRelease);
-            xinput2::XISetMask(&mut mask, xinput2::XI_Motion);
-
-            let mut input_event_mask = xinput2::XIEventMask{
-                deviceid: xinput2::XIAllMasterDevices,
-                mask_len: mask.len() as i32,
-                mask: mask.as_mut_ptr(),
-            };
-
-            if xinput2::XISelectEvents(self.handle, win_id, &mut input_event_mask, 1) != xlib::Success as i32
-            {
-                xlib::XDestroyWindow(self.handle, win_id);
-                return Err("Failed to select XInput2 events")
-            }
-
-            let fmt = xrender::XRenderFindVisualFormat(self.handle, visual);
-            //let pic_attr: xrender::XRenderPictureAttributes = mem::zeroed();
-            let pic_id = xrender::XRenderCreatePicture(self.handle, win_id, fmt, 0, null());
-
-            (win_id, pic_id)
-        };
-
-        let data = Default::default();
-        self.win_data.borrow_mut().insert(win_id, Rc::downgrade(&data));
-
-        Ok(XWindow{
-            display: self,
-            handle: win_id,
-            picture: pic_id,
-            data: data,
-        })
+        XWindow::new(self, width, height)
     }
 
     pub fn wait_event(&self)
@@ -824,6 +754,81 @@ pub struct XWindow<'a>
 
 impl<'a> XWindow<'a>
 {
+    fn new(display: &'a XDisplay, width: u32, height: u32) -> Result<Self, &'static str>
+    {
+        let (win_id, pic_id) = unsafe {
+            let screen_num = xlib::XDefaultScreen(display.handle);
+            let root_win = xlib::XRootWindow(display.handle, screen_num);
+            let visual = xlib::XDefaultVisual(display.handle, screen_num);
+            let black_pixel = xlib::XBlackPixel(display.handle, screen_num);
+
+            let mut win_attr = xlib::XSetWindowAttributes{
+                background_pixel: black_pixel,
+                event_mask: xlib::KeyPressMask |
+                            xlib::KeyReleaseMask |
+                            xlib::EnterWindowMask |
+                            xlib::LeaveWindowMask |
+                            xlib::ExposureMask |
+                            xlib::StructureNotifyMask |
+                            xlib::FocusChangeMask,
+                .. mem::zeroed()
+            };
+
+            let win_id = xlib::XCreateWindow(display.handle,
+                root_win,       // parent
+                0, 0,           // x, y
+                width, height,
+                0,              // border width
+                xlib::CopyFromParent,       // depth
+                xlib::InputOutput as u32,   // input class
+                null_mut(),                 // visual
+                xlib::CWBackPixel | xlib::CWEventMask, // value mask
+                &mut win_attr);
+
+            // suscribe to WM close event
+            let mut protocols = [display.atoms.wm_delete_window];
+            if xlib::XSetWMProtocols(display.handle, win_id, &mut protocols[0], protocols.len() as i32) == xlib::False
+            {
+                xlib::XDestroyWindow(display.handle, win_id);
+                return Err("can't set WM protocols");
+            }
+
+            // init XInput events
+            let mut mask = [0];
+            xinput2::XISetMask(&mut mask, xinput2::XI_ButtonPress);
+            xinput2::XISetMask(&mut mask, xinput2::XI_ButtonRelease);
+            xinput2::XISetMask(&mut mask, xinput2::XI_Motion);
+
+            let mut input_event_mask = xinput2::XIEventMask{
+                deviceid: xinput2::XIAllMasterDevices,
+                mask_len: mask.len() as i32,
+                mask: mask.as_mut_ptr(),
+            };
+
+            if xinput2::XISelectEvents(display.handle, win_id, &mut input_event_mask, 1) != xlib::Success as i32
+            {
+                xlib::XDestroyWindow(display.handle, win_id);
+                return Err("Failed to select XInput2 events")
+            }
+
+            let fmt = xrender::XRenderFindVisualFormat(display.handle, visual);
+            //let pic_attr: xrender::XRenderPictureAttributes = mem::zeroed();
+            let pic_id = xrender::XRenderCreatePicture(display.handle, win_id, fmt, 0, null());
+
+            (win_id, pic_id)
+        };
+
+        let data = Default::default();
+        display.win_data.borrow_mut().insert(win_id, Rc::downgrade(&data));
+
+        Ok(XWindow{
+            display: display,
+            handle: win_id,
+            picture: pic_id,
+            data: data,
+        })
+    }
+
     pub fn set_title(&self, title: &str)
     {
         let cs = CString::new(title).unwrap();  //TODO: dont unwrap
