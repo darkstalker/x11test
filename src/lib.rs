@@ -11,12 +11,6 @@ use std::cell::{Cell, RefCell};
 
 pub use event::*;
 
-//TODO: make a pull request for this
-fn cast_xevent<T: From<xlib::XEvent>>(ev: &xlib::XEvent) -> &T
-{
-    unsafe { mem::transmute(ev) }
-}
-
 fn as_button(button: i32) -> Button
 {
     match button {
@@ -370,17 +364,17 @@ impl XDisplay
     {
         match xevent.get_type() {
             xlib::KeyPress => {
-                let ev: &xlib::XKeyPressedEvent = cast_xevent(&xevent);
+                let ev: &xlib::XKeyPressedEvent = xevent.as_ref();
                 let key = self.scancode_to_key(ev.keycode as u8);
                 (ev.window, ParsedEvent::One(Event::Keyboard(EvState::Pressed, key)))
             },
             xlib::KeyRelease => {
-                let ev: &xlib::XKeyReleasedEvent = cast_xevent(&xevent);
+                let ev: &xlib::XKeyReleasedEvent = xevent.as_ref();
                 let key = self.scancode_to_key(ev.keycode as u8);
                 (ev.window, ParsedEvent::One(Event::Keyboard(EvState::Released, key)))
             },
             xlib::EnterNotify => {
-                let ev: &xlib::XEnterWindowEvent = cast_xevent(&xevent);
+                let ev: &xlib::XEnterWindowEvent = xevent.as_ref();
                 if ev.mode == xlib::NotifyNormal ||
                   (ev.mode == xlib::NotifyUngrab && ev.detail == xlib::NotifyNonlinear)
                 {
@@ -391,32 +385,32 @@ impl XDisplay
                 else { (ev.window, ParsedEvent::None) }
             },
             xlib::LeaveNotify => {
-                let ev: &xlib::XLeaveWindowEvent = cast_xevent(&xevent);
+                let ev: &xlib::XLeaveWindowEvent = xevent.as_ref();
                 match ev.mode {
                     xlib::NotifyNormal => (ev.window, ParsedEvent::One(Event::PointerInside(false))),
                     _ => (ev.window, ParsedEvent::None)
                 }
             },
             xlib::FocusIn => {
-                let ev: &xlib::XFocusInEvent = cast_xevent(&xevent);
+                let ev: &xlib::XFocusInEvent = xevent.as_ref();
                 match ev.mode {
                     xlib::NotifyNormal | xlib::NotifyWhileGrabbed => (ev.window, ParsedEvent::One(Event::Focused(true))),
                     _ => (ev.window, ParsedEvent::None)
                 }
             },
             xlib::FocusOut => {
-                let ev: &xlib::XFocusOutEvent = cast_xevent(&xevent);
+                let ev: &xlib::XFocusOutEvent = xevent.as_ref();
                 match ev.mode {
                     xlib::NotifyNormal | xlib::NotifyWhileGrabbed => (ev.window, ParsedEvent::One(Event::Focused(false))),
                     _ => (ev.window, ParsedEvent::None)
                 }
             },
             xlib::Expose => {
-                let ev: &xlib::XExposeEvent = cast_xevent(&xevent);
+                let ev: &xlib::XExposeEvent = xevent.as_ref();
                 (ev.window, ParsedEvent::One(Event::Redraw))
             },
             xlib::ConfigureNotify => {
-                let ev: &xlib::XConfigureEvent = cast_xevent(&xevent);
+                let ev: &xlib::XConfigureEvent = xevent.as_ref();
                 (ev.window, self.with_windata(ev.window, |wd| {
                     let mut events = Vec::with_capacity(2);
                     let size = (ev.width as u32, ev.height as u32);
@@ -444,7 +438,7 @@ impl XDisplay
                 }))
             },
             xlib::ClientMessage => {
-                let ev: &xlib::XClientMessageEvent = cast_xevent(&xevent);
+                let ev: &xlib::XClientMessageEvent = xevent.as_ref();
                 if ev.message_type == self.atoms.wm_protocols && ev.format == 32 &&
                     (ev.data.get_long(0) as xlib::Atom) == self.atoms.wm_delete_window
                 {
@@ -453,7 +447,7 @@ impl XDisplay
                 else { (ev.window, ParsedEvent::None) }
             },
             xlib::GenericEvent => {
-                let ev: &mut xlib::XGenericEventCookie = unsafe { mem::transmute(&mut xevent) };
+                let ev: &mut xlib::XGenericEventCookie = xevent.as_mut();
                 if unsafe { xlib::XGetEventData(self.handle, ev) } == xlib::False
                 {
                     println!("failed to get event data");
@@ -466,7 +460,7 @@ impl XDisplay
                 event
             },
             _ => {
-                let ev: &xlib::XAnyEvent = cast_xevent(&xevent);
+                let ev: &xlib::XAnyEvent = xevent.as_ref();
                 (ev.window, ParsedEvent::None)
             }
         }
