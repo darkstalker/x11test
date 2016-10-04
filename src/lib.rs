@@ -853,7 +853,7 @@ impl<'a> XWindow<'a>
     pub fn draw_rect(&self, x: i32, y: i32, width: u32, height: u32, (r, g, b, a): (u16, u16, u16, u16))
     {
         let color = xrender::XRenderColor{ red: r, green: g, blue: b, alpha: a };
-        unsafe{ xrender::XRenderFillRectangle(self.display.handle, /*PictOpOver*/ 3, self.picture, &color, x, y, width, height); }
+        unsafe{ xrender::XRenderFillRectangle(self.display.handle, xrender::PictOpOver, self.picture, &color, x, y, width, height); }
     }
 }
 
