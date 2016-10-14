@@ -36,13 +36,11 @@ fn main()
                 Event::Redraw => {
                     let ctx = window.draw();
                     ctx.clear(0.1, 0.1, 0.1, 1.0);
-                    window.swap_buffers();
                 }
                 Event::MouseButton(EvState::Pressed, Button::Left, (x, y)) => {
                     mdown = true;
                     let ctx = window.draw();
                     ctx.draw_rect(x as i16 - 5, y as i16 - 5, 10, 10, [1.0, 0.0, 0.0, 1.0]);
-                    window.swap_buffers();
                 },
                 Event::MouseButton(EvState::Released, Button::Left, _) => {
                     mdown = false;
@@ -50,7 +48,6 @@ fn main()
                 Event::MouseMoved(x, y) if mdown => {
                     let ctx = window.draw();
                     ctx.draw_rect(x as i16 - 5, y as i16 - 5, 10, 10, [1.0, 0.0, 0.0, 1.0]);
-                    window.swap_buffers();
                 },
                 _ => println!(">> main: {:?}", ev)
             }

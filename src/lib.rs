@@ -8,12 +8,11 @@ pub mod event;
 use x11::{xlib, xinput2, keysym};
 use std::{mem, slice};
 use std::ptr;
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::rc::{Rc, Weak};
 use std::cell::{Cell, RefCell};
-use glengine::{DrawEngine, DrawContext};
-use egl::types::*;
+use glengine::{eglw, DrawEngine, DrawContext};
 
 pub use event::*;
 
@@ -251,9 +250,6 @@ pub struct XDisplay
     devices: RefCell<HashMap<i32 /* device_id */, DeviceInfo>>,
     pointer_pos: Cell<(f64, f64)>,
     atoms: AtomCache,
-    egl_disp: EGLDisplay,
-    egl_config: EGLConfig,
-    gl_context: EGLContext,
     engine: DrawEngine,
 }
 
@@ -268,61 +264,8 @@ impl XDisplay
             return Err("Can't open display")
         }
 
-        // initialize EGL
-        let egl_disp = unsafe { egl::GetDisplay(display as _) };
-        if egl_disp == egl::NO_DISPLAY { return Err("error opening EGL display") }
-
-        let mut egl_major = 0;
-        let mut egl_minor = 0;
-        if unsafe { egl::Initialize(egl_disp, &mut egl_major, &mut egl_minor) } == 0 { return Err("error initializing EGL") }
-        println!("using EGL {}.{}", egl_major, egl_minor);
-
-        unsafe
-        {
-            let vendor = CStr::from_ptr(egl::QueryString(egl_disp, egl::VENDOR as EGLint));
-            let version = CStr::from_ptr(egl::QueryString(egl_disp, egl::VERSION as EGLint));
-            let apis = CStr::from_ptr(egl::QueryString(egl_disp, egl::CLIENT_APIS as EGLint));
-            let exts = CStr::from_ptr(egl::QueryString(egl_disp, egl::EXTENSIONS as EGLint));
-            println!("EGL vendor: {:?}\nEGL version: {:?}\nEGL apis: {:?}\nEGL extensions: {:?}",
-                vendor, version, apis, exts);
-        }
-
-        let cfg_attribs = [
-            egl::RED_SIZE, 8,
-            egl::GREEN_SIZE, 8,
-            egl::BLUE_SIZE, 8,
-            egl::ALPHA_SIZE, 8,
-            //egl::DEPTH_SIZE, 24,
-            egl::CONFORMANT, egl::OPENGL_ES2_BIT,
-            egl::RENDERABLE_TYPE, egl::OPENGL_ES2_BIT,
-            egl::NONE
-        ];
-        let configs: [EGLConfig; 1] = unsafe{ mem::zeroed() };
-        let mut num_cfg = 0;
-        if unsafe { egl::ChooseConfig(egl_disp, cfg_attribs.as_ptr() as _, configs.as_ptr() as *mut _, configs.len() as EGLint, &mut num_cfg) } == 0 { return Err("error choosing EGL config") }
-        if num_cfg == 0 { return Err("no compatible EGL configs found") }
-
-        let ctx_attribs = [
-            egl::CONTEXT_CLIENT_VERSION, 2,
-            egl::NONE
-        ];
-        let context = unsafe { egl::CreateContext(egl_disp, configs[0], egl::NO_CONTEXT, ctx_attribs.as_ptr() as _) };
-        if context == egl::NO_CONTEXT { return Err("error creating GL context") }
-
-        // we need to bind a context before making any GL call
-        if unsafe { egl::MakeCurrent(egl_disp, egl::NO_SURFACE, egl::NO_SURFACE, context) } == 0 { return Err("error binding GL context") };
-
-        gl::load_with(|name| unsafe { egl::GetProcAddress(CString::new(name).unwrap().as_ptr()) } as *const _);
-
-        unsafe
-        {
-            let vendor = CStr::from_ptr(gl::GetString(gl::VENDOR) as *const _);
-            let renderer = CStr::from_ptr(gl::GetString(gl::RENDERER) as *const _);
-            let version = CStr::from_ptr(gl::GetString(gl::VERSION) as *const _);
-            let exts = CStr::from_ptr(gl::GetString(gl::EXTENSIONS) as *const _);
-            println!("GL vendor: {:?}\nGL renderer: {:?}\nGL version: {:?}\nGL extensions: {:?}",
-                vendor, renderer, version, exts);
-        }
+        // this initializes EGL and the GL context
+        let engine = try!(DrawEngine::new(display as _));
 
         let mut xdis = XDisplay{
             handle: display,
@@ -330,10 +273,7 @@ impl XDisplay
             devices: Default::default(),
             pointer_pos: Cell::new((-1.0, -1.0)),
             atoms: unsafe { mem::zeroed() },
-            egl_disp: egl_disp,
-            egl_config: configs[0],
-            gl_context: context,
-            engine: DrawEngine::new(),
+            engine: engine,
         };
 
         // get atoms
@@ -393,11 +333,6 @@ impl XDisplay
     pub fn create_window(&self, width: u32, height: u32) -> Result<XWindow, &'static str>
     {
         XWindow::new(self, width, height)
-    }
-
-    fn make_current(&self, surface: EGLSurface)
-    {
-        if unsafe { egl::MakeCurrent(self.egl_disp, surface, surface, self.gl_context) } == 0 { panic!("error in eglMakeCurrent") };
     }
 
     pub fn wait_event(&self)
@@ -809,7 +744,7 @@ pub struct XWindow<'a>
 {
     display: &'a XDisplay,
     handle: xlib::Window,
-    surface: EGLSurface,
+    surface: eglw::Surface<'a>,
     data: Rc<WindowData>,
 }
 
@@ -874,8 +809,7 @@ impl<'a> XWindow<'a>
             win_id
         };
 
-        let surface = unsafe { egl::CreateWindowSurface(display.egl_disp, display.egl_config, win_id as _, ptr::null()) };
-        if surface == egl::NO_SURFACE { return Err("can't create EGL surface") }
+        let surface = try!(display.engine.create_window_surface(win_id as _));
 
         let data = Default::default();
         display.win_data.borrow_mut().insert(win_id, Rc::downgrade(&data));
@@ -916,14 +850,7 @@ impl<'a> XWindow<'a>
 
     pub fn draw(&self) -> DrawContext
     {
-        self.display.make_current(self.surface);
-        self.display.engine.begin_draw(self.data.size.get())
-    }
-
-    // this should be called automatically when dropping DrawContext
-    pub fn swap_buffers(&self)
-    {
-        if unsafe { egl::SwapBuffers(self.display.egl_disp, self.surface) } == 0 { panic!("error on eglSwapBuffers") }
+        self.display.engine.begin_draw(&self.surface, self.data.size.get())
     }
 }
 

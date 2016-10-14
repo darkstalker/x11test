@@ -2,10 +2,12 @@ mod types;
 #[macro_use]
 mod typeinfo;
 mod shader;
+pub mod eglw;
 
 use std::mem;
 use gl;
 use gl::types::*;
+
 use self::typeinfo::TypeInfo;
 use self::shader::{Shader, Program};
 
@@ -21,14 +23,17 @@ impl_typeinfo!(Vertex, pos, col);
 
 pub struct DrawEngine
 {
+    egl_disp: eglw::Display,
     prog: Program,
     vbo: GLuint,
 }
 
 impl DrawEngine
 {
-    pub fn new() -> Self
+    pub fn new(xdisp: eglw::NativeDisplay) -> Result<Self, &'static str>
     {
+        let egl_disp = try!(eglw::Display::new(xdisp));
+
         //FIXME: should use struct gl generator
         // need to prevent leaking state and current context as much as possible
         unsafe
@@ -49,12 +54,22 @@ impl DrawEngine
                 gl::EnableVertexAttribArray(num);
             });
 
-            DrawEngine{ prog: prog, vbo: vbo }
+            Ok(DrawEngine{
+                egl_disp: egl_disp,
+                prog: prog,
+                vbo: vbo,
+            })
         }
     }
 
-    pub fn begin_draw(&self, (width, height): (u32, u32)) -> DrawContext
+    pub fn create_window_surface(&self, win: eglw::NativeWindow) -> Result<eglw::Surface, &'static str>
     {
+        self.egl_disp.create_window_surface(win)
+    }
+
+    pub fn begin_draw<'a>(&'a self, surface: &'a eglw::Surface, (width, height): (u32, u32)) -> DrawContext
+    {
+        surface.make_current();
         self.prog.set_active();
         let loc_tf = self.prog.get_uniform("tf").unwrap() as GLint;
         let (w, h) = (width as f32, height as f32);
@@ -69,7 +84,8 @@ impl DrawEngine
             gl::UniformMatrix3fv(loc_tf, 1, gl::FALSE, tf.as_ptr());
 
         }
-        DrawContext
+
+        DrawContext(surface)
     }
 }
 
@@ -81,10 +97,9 @@ impl Drop for DrawEngine
     }
 }
 
-// TODO. add ref to window/state so we can call swapbuffers on drop
-pub struct DrawContext;
+pub struct DrawContext<'a>(&'a eglw::Surface<'a>);
 
-impl DrawContext
+impl<'a> DrawContext<'a>
 {
     pub fn clear(&self, r: f32, g: f32, b: f32, a: f32)
     {
@@ -118,5 +133,13 @@ impl DrawContext
             gl::BufferData(gl::ARRAY_BUFFER, mem::size_of_val(&verts) as GLsizeiptr, verts.as_ptr() as *const _, gl::STREAM_DRAW);
             gl::DrawElements(gl::TRIANGLES, idx.len() as GLsizei, gl::UNSIGNED_SHORT, idx.as_ptr() as *const _);
         }
+    }
+}
+
+impl<'a> Drop for DrawContext<'a>
+{
+    fn drop(&mut self)
+    {
+        self.0.swap_buffers();
     }
 }

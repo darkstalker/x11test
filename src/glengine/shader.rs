@@ -51,7 +51,6 @@ impl ShaderStatus for Shader
     {
         let mut status = 0;
         unsafe{ gl::GetShaderiv(self.0, gl::COMPILE_STATUS, &mut status) };
-        println!("shader status {:?}", status);
         status == gl::TRUE as i32
     }
 
@@ -59,7 +58,6 @@ impl ShaderStatus for Shader
     {
         let mut log_len = 0;
         unsafe{ gl::GetShaderiv(self.0, gl::INFO_LOG_LENGTH, &mut log_len) };
-        println!("shader log len {:?}", log_len);
         if log_len > 0
         {
             let mut log_buff = vec![0u8; log_len as usize];
@@ -128,7 +126,6 @@ impl ShaderStatus for Program
     {
         let mut status = 0;
         unsafe{ gl::GetProgramiv(self.0, gl::LINK_STATUS, &mut status) };
-        println!("program status {:?}", status);
         status == gl::TRUE as i32
     }
 
@@ -136,7 +133,6 @@ impl ShaderStatus for Program
     {
         let mut log_len = 0;
         unsafe{ gl::GetProgramiv(self.0, gl::INFO_LOG_LENGTH, &mut log_len) };
-        println!("link log len {:?}", log_len);
         if log_len > 0
         {
             let mut log_buff = vec![0u8; log_len as usize];
