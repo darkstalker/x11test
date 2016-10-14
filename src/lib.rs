@@ -1,13 +1,19 @@
 extern crate x11;
+extern crate custom_gl as gl;
+extern crate custom_egl as egl;
+
+mod glengine;
 pub mod event;
 
-use x11::{xlib, xinput2, xrender, keysym};
+use x11::{xlib, xinput2, keysym};
 use std::{mem, slice};
-use std::ptr::{null, null_mut};
-use std::ffi::CString;
+use std::ptr;
+use std::ffi::{CStr, CString};
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::rc::{Rc, Weak};
 use std::cell::{Cell, RefCell};
+use glengine::{DrawEngine, DrawContext};
+use egl::types::*;
 
 pub use event::*;
 
@@ -245,6 +251,10 @@ pub struct XDisplay
     devices: RefCell<HashMap<i32 /* device_id */, DeviceInfo>>,
     pointer_pos: Cell<(f64, f64)>,
     atoms: AtomCache,
+    egl_disp: EGLDisplay,
+    egl_config: EGLConfig,
+    gl_context: EGLContext,
+    engine: DrawEngine,
 }
 
 impl XDisplay
@@ -252,10 +262,66 @@ impl XDisplay
     pub fn new() -> Result<Self, &'static str>  //TODO: Err type
     {
         // open display
-        let display = unsafe{ xlib::XOpenDisplay(null()) };
-        if display == null_mut()
+        let display = unsafe{ xlib::XOpenDisplay(ptr::null()) };
+        if display == ptr::null_mut()
         {
             return Err("Can't open display")
+        }
+
+        // initialize EGL
+        let egl_disp = unsafe { egl::GetDisplay(display as _) };
+        if egl_disp == egl::NO_DISPLAY { return Err("error opening EGL display") }
+
+        let mut egl_major = 0;
+        let mut egl_minor = 0;
+        if unsafe { egl::Initialize(egl_disp, &mut egl_major, &mut egl_minor) } == 0 { return Err("error initializing EGL") }
+        println!("using EGL {}.{}", egl_major, egl_minor);
+
+        unsafe
+        {
+            let vendor = CStr::from_ptr(egl::QueryString(egl_disp, egl::VENDOR as EGLint));
+            let version = CStr::from_ptr(egl::QueryString(egl_disp, egl::VERSION as EGLint));
+            let apis = CStr::from_ptr(egl::QueryString(egl_disp, egl::CLIENT_APIS as EGLint));
+            let exts = CStr::from_ptr(egl::QueryString(egl_disp, egl::EXTENSIONS as EGLint));
+            println!("EGL vendor: {:?}\nEGL version: {:?}\nEGL apis: {:?}\nEGL extensions: {:?}",
+                vendor, version, apis, exts);
+        }
+
+        let cfg_attribs = [
+            egl::RED_SIZE, 8,
+            egl::GREEN_SIZE, 8,
+            egl::BLUE_SIZE, 8,
+            egl::ALPHA_SIZE, 8,
+            //egl::DEPTH_SIZE, 24,
+            egl::CONFORMANT, egl::OPENGL_ES2_BIT,
+            egl::RENDERABLE_TYPE, egl::OPENGL_ES2_BIT,
+            egl::NONE
+        ];
+        let configs: [EGLConfig; 1] = unsafe{ mem::zeroed() };
+        let mut num_cfg = 0;
+        if unsafe { egl::ChooseConfig(egl_disp, cfg_attribs.as_ptr() as _, configs.as_ptr() as *mut _, configs.len() as EGLint, &mut num_cfg) } == 0 { return Err("error choosing EGL config") }
+        if num_cfg == 0 { return Err("no compatible EGL configs found") }
+
+        let ctx_attribs = [
+            egl::CONTEXT_CLIENT_VERSION, 2,
+            egl::NONE
+        ];
+        let context = unsafe { egl::CreateContext(egl_disp, configs[0], egl::NO_CONTEXT, ctx_attribs.as_ptr() as _) };
+        if context == egl::NO_CONTEXT { return Err("error creating GL context") }
+
+        // we need to bind a context before making any GL call
+        if unsafe { egl::MakeCurrent(egl_disp, egl::NO_SURFACE, egl::NO_SURFACE, context) } == 0 { return Err("error binding GL context") };
+
+        gl::load_with(|name| unsafe { egl::GetProcAddress(CString::new(name).unwrap().as_ptr()) } as *const _);
+
+        unsafe
+        {
+            let vendor = CStr::from_ptr(gl::GetString(gl::VENDOR) as *const _);
+            let renderer = CStr::from_ptr(gl::GetString(gl::RENDERER) as *const _);
+            let version = CStr::from_ptr(gl::GetString(gl::VERSION) as *const _);
+            let exts = CStr::from_ptr(gl::GetString(gl::EXTENSIONS) as *const _);
+            println!("GL vendor: {:?}\nGL renderer: {:?}\nGL version: {:?}\nGL extensions: {:?}",
+                vendor, renderer, version, exts);
         }
 
         let mut xdis = XDisplay{
@@ -264,6 +330,10 @@ impl XDisplay
             devices: Default::default(),
             pointer_pos: Cell::new((-1.0, -1.0)),
             atoms: unsafe { mem::zeroed() },
+            egl_disp: egl_disp,
+            egl_config: configs[0],
+            gl_context: context,
+            engine: DrawEngine::new(),
         };
 
         // get atoms
@@ -295,14 +365,6 @@ impl XDisplay
             return Err("XInput2 not available")
         }
 
-        // query for XRender support
-        let mut xr_event = 0;
-        let mut xr_error = 0;
-        if unsafe { xrender::XRenderQueryExtension(display, &mut xr_event, &mut xr_error) } == xlib::False
-        {
-            return Err("XRender extension not available")
-        }
-
         // enable XInput hierarchy events
         let mut mask = [0; 2];
         xinput2::XISetMask(&mut mask, xinput2::XI_HierarchyChanged);
@@ -320,7 +382,7 @@ impl XDisplay
         }
 
         // disable fake KeyRelease events on auto repeat
-        unsafe { xlib::XkbSetDetectableAutoRepeat(display, xlib::True, null_mut()); }
+        unsafe { xlib::XkbSetDetectableAutoRepeat(display, xlib::True, ptr::null_mut()); }
 
         // load device info
         xdis.load_axis_info(xinput2::XIAllDevices);
@@ -331,6 +393,11 @@ impl XDisplay
     pub fn create_window(&self, width: u32, height: u32) -> Result<XWindow, &'static str>
     {
         XWindow::new(self, width, height)
+    }
+
+    fn make_current(&self, surface: EGLSurface)
+    {
+        if unsafe { egl::MakeCurrent(self.egl_disp, surface, surface, self.gl_context) } == 0 { panic!("error in eglMakeCurrent") };
     }
 
     pub fn wait_event(&self)
@@ -742,7 +809,7 @@ pub struct XWindow<'a>
 {
     display: &'a XDisplay,
     handle: xlib::Window,
-    picture: xrender::Picture,
+    surface: EGLSurface,
     data: Rc<WindowData>,
 }
 
@@ -750,14 +817,13 @@ impl<'a> XWindow<'a>
 {
     fn new(display: &'a XDisplay, width: u32, height: u32) -> Result<Self, &'static str>
     {
-        let (win_id, pic_id) = unsafe {
+        let win_id = unsafe {
             let screen_num = xlib::XDefaultScreen(display.handle);
             let root_win = xlib::XRootWindow(display.handle, screen_num);
-            let visual = xlib::XDefaultVisual(display.handle, screen_num);
-            let black_pixel = xlib::XBlackPixel(display.handle, screen_num);
+            //let black_pixel = xlib::XBlackPixel(display.handle, screen_num);
 
             let mut win_attr = xlib::XSetWindowAttributes{
-                background_pixel: black_pixel,
+                //background_pixel: black_pixel,
                 event_mask: xlib::KeyPressMask |
                             xlib::KeyReleaseMask |
                             xlib::EnterWindowMask |
@@ -775,7 +841,7 @@ impl<'a> XWindow<'a>
                 0,              // border width
                 xlib::CopyFromParent,       // depth
                 xlib::InputOutput as u32,   // input class
-                null_mut(),                 // visual
+                ptr::null_mut(),            // visual
                 xlib::CWBackPixel | xlib::CWEventMask, // value mask
                 &mut win_attr);
 
@@ -805,12 +871,11 @@ impl<'a> XWindow<'a>
                 return Err("Failed to select XInput2 events")
             }
 
-            let fmt = xrender::XRenderFindVisualFormat(display.handle, visual);
-            //let pic_attr: xrender::XRenderPictureAttributes = mem::zeroed();
-            let pic_id = xrender::XRenderCreatePicture(display.handle, win_id, fmt, 0, null());
-
-            (win_id, pic_id)
+            win_id
         };
+
+        let surface = unsafe { egl::CreateWindowSurface(display.egl_disp, display.egl_config, win_id as _, ptr::null()) };
+        if surface == egl::NO_SURFACE { return Err("can't create EGL surface") }
 
         let data = Default::default();
         display.win_data.borrow_mut().insert(win_id, Rc::downgrade(&data));
@@ -818,7 +883,7 @@ impl<'a> XWindow<'a>
         Ok(XWindow{
             display: display,
             handle: win_id,
-            picture: pic_id,
+            surface: surface,
             data: data,
         })
     }
@@ -849,11 +914,16 @@ impl<'a> XWindow<'a>
         self.data.ev_queue.borrow_mut().pop_front()
     }
 
-    // probably should make a context object for drawing
-    pub fn draw_rect(&self, x: i32, y: i32, width: u32, height: u32, (r, g, b, a): (u16, u16, u16, u16))
+    pub fn draw(&self) -> DrawContext
     {
-        let color = xrender::XRenderColor{ red: r, green: g, blue: b, alpha: a };
-        unsafe{ xrender::XRenderFillRectangle(self.display.handle, xrender::PictOpOver, self.picture, &color, x, y, width, height); }
+        self.display.make_current(self.surface);
+        self.display.engine.begin_draw(self.data.size.get())
+    }
+
+    // this should be called automatically when dropping DrawContext
+    pub fn swap_buffers(&self)
+    {
+        if unsafe { egl::SwapBuffers(self.display.egl_disp, self.surface) } == 0 { panic!("error on eglSwapBuffers") }
     }
 }
 
@@ -863,7 +933,6 @@ impl<'a> Drop for XWindow<'a>
     {
         unsafe
         {
-            xrender::XRenderFreePicture(self.display.handle, self.picture);
             xlib::XDestroyWindow(self.display.handle, self.handle);
         }
     }

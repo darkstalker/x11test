@@ -1,0 +1,11 @@
+[package]
+name = "custom_egl"
+version = "0.1.0"
+authors = ["darkstalker <slayerbeast@gmail.com>"]
+build = "build.rs"
+
+[build-dependencies]
+gl_generator = "0.5.2"
+
+[dependencies]
+khronos = "0.1.1"

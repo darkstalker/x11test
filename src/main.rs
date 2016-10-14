@@ -5,7 +5,7 @@ fn main()
 {
     let display = XDisplay::new().unwrap();
 
-    let window = display.create_window(300, 300).unwrap();
+    let window = display.create_window(640, 480).unwrap();
     window.set_title("main");
     window.show();
 
@@ -33,15 +33,24 @@ fn main()
                 Event::Keyboard(EvState::Pressed, Key::Unk(ks)) => {
                     println!("** keysym: {:x}", ks);
                 },
+                Event::Redraw => {
+                    let ctx = window.draw();
+                    ctx.clear(0.1, 0.1, 0.1, 1.0);
+                    window.swap_buffers();
+                }
                 Event::MouseButton(EvState::Pressed, Button::Left, (x, y)) => {
                     mdown = true;
-                    window.draw_rect(x as i32 - 5, y as i32 - 5, 10, 10, (0xffff, 0, 0, 0xffff));
+                    let ctx = window.draw();
+                    ctx.draw_rect(x as i16 - 5, y as i16 - 5, 10, 10, [1.0, 0.0, 0.0, 1.0]);
+                    window.swap_buffers();
                 },
                 Event::MouseButton(EvState::Released, Button::Left, _) => {
                     mdown = false;
                 },
                 Event::MouseMoved(x, y) if mdown => {
-                    window.draw_rect(x as i32 - 5, y as i32 - 5, 10, 10, (0xffff, 0, 0, 0xffff));
+                    let ctx = window.draw();
+                    ctx.draw_rect(x as i16 - 5, y as i16 - 5, 10, 10, [1.0, 0.0, 0.0, 1.0]);
+                    window.swap_buffers();
                 },
                 _ => println!(">> main: {:?}", ev)
             }
