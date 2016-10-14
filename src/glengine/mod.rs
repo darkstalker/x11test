@@ -4,9 +4,11 @@ mod typeinfo;
 mod shader;
 pub mod eglw;
 
-use std::mem;
 use gl;
 use gl::types::*;
+use std::mem;
+use std::rc::Rc;
+use std::ffi::CStr;
 
 use self::typeinfo::TypeInfo;
 use self::shader::{Shader, Program};
@@ -24,6 +26,7 @@ impl_typeinfo!(Vertex, pos, col);
 pub struct DrawEngine
 {
     egl_disp: eglw::Display,
+    gl: Rc<gl::Gles2>,
     prog: Program,
     vbo: GLuint,
 }
@@ -34,28 +37,39 @@ impl DrawEngine
     {
         let egl_disp = try!(eglw::Display::new(xdisp));
 
-        //FIXME: should use struct gl generator
-        // need to prevent leaking state and current context as much as possible
+        let gl = Rc::new(gl::Gles2::load_with(|name| egl_disp.get_proc_address(name)));
+
         unsafe
         {
-            let prog = Program::new(&[
-                Shader::new(gl::VERTEX_SHADER, &[include_str!("test.vert.glsl")]).unwrap_or_else(|e| panic!("vert: {}", e)),
-                Shader::new(gl::FRAGMENT_SHADER, &[include_str!("test.frag.glsl")]).unwrap_or_else(|e| panic!("frag: {}", e)),
+            let vendor = CStr::from_ptr(gl.GetString(gl::VENDOR) as *const _);
+            let renderer = CStr::from_ptr(gl.GetString(gl::RENDERER) as *const _);
+            let version = CStr::from_ptr(gl.GetString(gl::VERSION) as *const _);
+            let exts = CStr::from_ptr(gl.GetString(gl::EXTENSIONS) as *const _);
+            println!("GL vendor: {:?}\nGL renderer: {:?}\nGL version: {:?}\nGL extensions: {:?}",
+                vendor, renderer, version, exts);
+        }
+
+        unsafe
+        {
+            let prog = Program::new(gl.clone(), &[
+                Shader::new(gl.clone(), gl::VERTEX_SHADER, &[include_str!("test.vert.glsl")]).unwrap_or_else(|e| panic!("vert: {}", e)),
+                Shader::new(gl.clone(), gl::FRAGMENT_SHADER, &[include_str!("test.frag.glsl")]).unwrap_or_else(|e| panic!("frag: {}", e)),
             ]).unwrap_or_else(|e| panic!("link: {}", e));
 
             let mut vbo = 0;
-            gl::GenBuffers(1, &mut vbo);
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+            gl.GenBuffers(1, &mut vbo);
+            gl.BindBuffer(gl::ARRAY_BUFFER, vbo);
             let size = mem::size_of::<Vertex>();
             Vertex::visit_fields(|name, offset, count, ty| {
                 let num = prog.get_attrib(name).unwrap();
                 //println!("attr '{}' ({}), offset={} count={} type={:?}", name, num, offset, count, ty);
-                gl::VertexAttribPointer(num, count as GLint, ty as GLenum, gl::FALSE, size as GLsizei, offset as *const _);
-                gl::EnableVertexAttribArray(num);
+                gl.VertexAttribPointer(num, count as GLint, ty as GLenum, gl::FALSE, size as GLsizei, offset as *const _);
+                gl.EnableVertexAttribArray(num);
             });
 
             Ok(DrawEngine{
                 egl_disp: egl_disp,
+                gl: gl,
                 prog: prog,
                 vbo: vbo,
             })
@@ -80,12 +94,12 @@ impl DrawEngine
         ];
         unsafe
         {
-            gl::Viewport(0, 0, width as GLsizei, height as GLsizei);
-            gl::UniformMatrix3fv(loc_tf, 1, gl::FALSE, tf.as_ptr());
+            self.gl.Viewport(0, 0, width as GLsizei, height as GLsizei);
+            self.gl.UniformMatrix3fv(loc_tf, 1, gl::FALSE, tf.as_ptr());
 
         }
 
-        DrawContext(surface)
+        DrawContext{ surface: surface, gl: self.gl.clone() }
     }
 }
 
@@ -93,11 +107,15 @@ impl Drop for DrawEngine
 {
     fn drop(&mut self)
     {
-        unsafe{ gl::DeleteBuffers(1, &mut self.vbo) };
+        unsafe{ self.gl.DeleteBuffers(1, &mut self.vbo) };
     }
 }
 
-pub struct DrawContext<'a>(&'a eglw::Surface<'a>);
+pub struct DrawContext<'a>
+{
+    surface: &'a eglw::Surface<'a>,
+    gl: Rc<gl::Gles2>,
+}
 
 impl<'a> DrawContext<'a>
 {
@@ -106,8 +124,8 @@ impl<'a> DrawContext<'a>
         //TODO: discard pending draw operations
         unsafe
         {
-            gl::ClearColor(r, g, b, a);
-            gl::Clear(gl::COLOR_BUFFER_BIT);
+            self.gl.ClearColor(r, g, b, a);
+            self.gl.Clear(gl::COLOR_BUFFER_BIT);
         }
     }
 
@@ -130,8 +148,8 @@ impl<'a> DrawContext<'a>
 
         unsafe
         {
-            gl::BufferData(gl::ARRAY_BUFFER, mem::size_of_val(&verts) as GLsizeiptr, verts.as_ptr() as *const _, gl::STREAM_DRAW);
-            gl::DrawElements(gl::TRIANGLES, idx.len() as GLsizei, gl::UNSIGNED_SHORT, idx.as_ptr() as *const _);
+            self.gl.BufferData(gl::ARRAY_BUFFER, mem::size_of_val(&verts) as GLsizeiptr, verts.as_ptr() as *const _, gl::STREAM_DRAW);
+            self.gl.DrawElements(gl::TRIANGLES, idx.len() as GLsizei, gl::UNSIGNED_SHORT, idx.as_ptr() as *const _);
         }
     }
 }
@@ -140,6 +158,6 @@ impl<'a> Drop for DrawContext<'a>
 {
     fn drop(&mut self)
     {
-        self.0.swap_buffers();
+        self.surface.swap_buffers();
     }
 }

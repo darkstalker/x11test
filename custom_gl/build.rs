@@ -13,6 +13,6 @@ fn main()
 
     Registry::new(Api::Gles2, (2, 0), Profile::Core, Fallbacks::All, [
         ])
-        .write_bindings(gl_generator::GlobalGenerator, &mut file)
+        .write_bindings(gl_generator::StructGenerator, &mut file)
         .unwrap();
 }

@@ -1,10 +1,10 @@
-use gl;
 use egl;
 use egl::types::*;
 
 use std::mem;
 use std::ptr;
 use std::ffi::{CStr, CString};
+use std::os::raw::c_void;
 
 pub type NativeDisplay = NativeDisplayType;
 pub type NativeWindow = NativeWindowType;
@@ -78,23 +78,17 @@ impl Display
             return Err("error binding GL context")
         }
 
-        gl::load_with(|name| unsafe { egl::GetProcAddress(CString::new(name).unwrap().as_ptr()) } as *const _);
-
-        unsafe
-        {
-            let vendor = CStr::from_ptr(gl::GetString(gl::VENDOR) as *const _);
-            let renderer = CStr::from_ptr(gl::GetString(gl::RENDERER) as *const _);
-            let version = CStr::from_ptr(gl::GetString(gl::VERSION) as *const _);
-            let exts = CStr::from_ptr(gl::GetString(gl::EXTENSIONS) as *const _);
-            println!("GL vendor: {:?}\nGL renderer: {:?}\nGL version: {:?}\nGL extensions: {:?}",
-                vendor, renderer, version, exts);
-        }
-
         Ok(Display{
             egl_disp: egl_disp,
             egl_config: configs[0],
             gl_context: context,
         })
+    }
+
+    pub fn get_proc_address(&self, name: &str) -> *const c_void
+    {
+        let name_ = CString::new(name).unwrap();
+        unsafe { egl::GetProcAddress(name_.as_ptr()) as *const _ }
     }
 
     pub fn create_window_surface(&self, win: NativeWindowType) -> Result<Surface, &'static str>
