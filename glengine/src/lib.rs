@@ -5,7 +5,7 @@ mod types;
 #[macro_use]
 mod typeinfo;
 mod shader;
-pub mod eglw;
+mod eglw;
 
 use std::mem;
 use std::rc::Rc;
@@ -13,6 +13,10 @@ use std::ffi::CStr;
 use gl::types::*;
 use typeinfo::TypeInfo;
 use shader::{Shader, Program};
+
+pub use egl::NativeDisplayType;
+pub use egl::NativeWindowType;
+pub use eglw::Surface;
 
 #[repr(C)]
 struct Vertex
@@ -34,7 +38,7 @@ pub struct DrawEngine
 
 impl DrawEngine
 {
-    pub fn new(xdisp: eglw::NativeDisplay) -> Result<Self, &'static str>
+    pub fn new(xdisp: NativeDisplayType) -> Result<Self, &'static str>
     {
         let egl_disp = try!(eglw::Display::new(xdisp));
 
@@ -77,12 +81,12 @@ impl DrawEngine
         }
     }
 
-    pub fn create_window_surface(&self, win: eglw::NativeWindow) -> Result<eglw::Surface, &'static str>
+    pub fn create_window_surface(&self, win: NativeWindowType) -> Result<Surface, &'static str>
     {
         self.egl_disp.create_window_surface(win)
     }
 
-    pub fn begin_draw<'a>(&'a self, surface: &'a eglw::Surface, (width, height): (u32, u32)) -> DrawContext
+    pub fn begin_draw<'a>(&'a self, surface: &'a Surface, (width, height): (u32, u32)) -> DrawContext
     {
         surface.make_current();
         self.prog.set_active();
@@ -114,7 +118,7 @@ impl Drop for DrawEngine
 
 pub struct DrawContext<'a>
 {
-    surface: &'a eglw::Surface<'a>,
+    surface: &'a Surface<'a>,
     gl: Rc<gl::Gles2>,
 }
 

@@ -10,7 +10,6 @@ use std::ffi::CString;
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::rc::{Rc, Weak};
 use std::cell::{Cell, RefCell};
-use glengine::{eglw, DrawEngine, DrawContext};
 
 pub use event::*;
 
@@ -248,7 +247,7 @@ pub struct XDisplay
     devices: RefCell<HashMap<i32 /* device_id */, DeviceInfo>>,
     pointer_pos: Cell<(f64, f64)>,
     atoms: AtomCache,
-    engine: DrawEngine,
+    engine: glengine::DrawEngine,
 }
 
 impl XDisplay
@@ -263,7 +262,7 @@ impl XDisplay
         }
 
         // this initializes EGL and the GL context
-        let engine = try!(DrawEngine::new(display as _));
+        let engine = try!(glengine::DrawEngine::new(display as _));
 
         let mut xdis = XDisplay{
             handle: display,
@@ -742,7 +741,7 @@ pub struct XWindow<'a>
 {
     display: &'a XDisplay,
     handle: xlib::Window,
-    surface: eglw::Surface<'a>,
+    surface: glengine::Surface<'a>,
     data: Rc<WindowData>,
 }
 
@@ -846,7 +845,7 @@ impl<'a> XWindow<'a>
         self.data.ev_queue.borrow_mut().pop_front()
     }
 
-    pub fn draw(&self) -> DrawContext
+    pub fn draw(&self) -> glengine::DrawContext
     {
         self.display.engine.begin_draw(&self.surface, self.data.size.get())
     }

@@ -6,9 +6,6 @@ use std::ptr;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_void;
 
-pub type NativeDisplay = NativeDisplayType;
-pub type NativeWindow = NativeWindowType;
-
 pub struct Display
 {
     egl_disp: EGLDisplay,
