@@ -135,6 +135,11 @@ impl<'a> Surface<'a>
             panic!("error in eglMakeCurrent")
         }
     }
+
+    pub fn is_current(&self) -> bool
+    {
+        unsafe { egl::GetCurrentSurface(egl::DRAW as EGLint) == self.id }
+    }
 }
 
 impl<'a> Drop for Surface<'a>

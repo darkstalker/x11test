@@ -60,6 +60,7 @@ impl DrawEngine
                 Shader::new(gl.clone(), gl::VERTEX_SHADER, &[include_str!("test.vert.glsl")]).unwrap_or_else(|e| panic!("vert: {}", e)),
                 Shader::new(gl.clone(), gl::FRAGMENT_SHADER, &[include_str!("test.frag.glsl")]).unwrap_or_else(|e| panic!("frag: {}", e)),
             ]).unwrap_or_else(|e| panic!("link: {}", e));
+            prog.set_active();
 
             let mut vbo = 0;
             gl.GenBuffers(1, &mut vbo);
@@ -88,20 +89,22 @@ impl DrawEngine
 
     pub fn begin_draw<'a>(&'a self, surface: &'a Surface, (width, height): (u32, u32)) -> DrawContext
     {
-        surface.make_current();
-        self.prog.set_active();
-        let loc_tf = self.prog.get_uniform("tf").unwrap() as GLint;
-        let (w, h) = (width as f32, height as f32);
-        let tf = [
-            2.0/w,    0.0, 0.0, 0.0,
-              0.0, -2.0/h, 0.0, 0.0,
-              0.0,    0.0, 1.0, 0.0,
-             -1.0,    1.0, 0.0, 1.0,
-        ];
-        unsafe
+        if !surface.is_current()
         {
-            self.gl.Viewport(0, 0, width as GLsizei, height as GLsizei);
-            self.gl.UniformMatrix4fv(loc_tf, 1, gl::FALSE, tf.as_ptr());
+            let (w, h) = (width as f32, height as f32);
+            let tf = [
+                2.0/w,    0.0, 0.0, 0.0,
+                  0.0, -2.0/h, 0.0, 0.0,
+                  0.0,    0.0, 1.0, 0.0,
+                 -1.0,    1.0, 0.0, 1.0,
+            ];
+            surface.make_current();
+            let loc_tf = self.prog.get_uniform("tf").unwrap() as GLint;
+            unsafe
+            {
+                self.gl.Viewport(0, 0, width as GLsizei, height as GLsizei);
+                self.gl.UniformMatrix4fv(loc_tf, 1, gl::FALSE, tf.as_ptr());
+            }
         }
 
         DrawContext{ surface: surface, gl: self.gl.clone() }
