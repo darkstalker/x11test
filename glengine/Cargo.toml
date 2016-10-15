@@ -1,0 +1,8 @@
+[package]
+name = "glengine"
+version = "0.1.0"
+authors = ["darkstalker <slayerbeast@gmail.com>"]
+
+[dependencies]
+custom_egl = { path = "../custom_egl" }
+custom_gl = { path = "../custom_gl" }

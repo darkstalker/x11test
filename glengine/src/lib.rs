@@ -1,17 +1,18 @@
+extern crate custom_gl as gl;
+extern crate custom_egl as egl;
+
 mod types;
 #[macro_use]
 mod typeinfo;
 mod shader;
 pub mod eglw;
 
-use gl;
-use gl::types::*;
 use std::mem;
 use std::rc::Rc;
 use std::ffi::CStr;
-
-use self::typeinfo::TypeInfo;
-use self::shader::{Shader, Program};
+use gl::types::*;
+use typeinfo::TypeInfo;
+use shader::{Shader, Program};
 
 #[repr(C)]
 struct Vertex

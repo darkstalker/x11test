@@ -1,8 +1,6 @@
 extern crate x11;
-extern crate custom_gl as gl;
-extern crate custom_egl as egl;
+extern crate glengine;
 
-mod glengine;
 pub mod event;
 
 use x11::{xlib, xinput2, keysym};

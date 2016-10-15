@@ -5,5 +5,4 @@ authors = ["darkstalker <slayerbeast@gmail.com>"]
 
 [dependencies]
 x11 = { version = "2.9.0", features = ["xlib", "xinput"] }
-custom_egl = { path = "custom_egl" }
-custom_gl = { path = "custom_gl" }
+glengine = { path = "glengine" }
