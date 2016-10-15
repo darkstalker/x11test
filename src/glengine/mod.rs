@@ -88,15 +88,15 @@ impl DrawEngine
         let loc_tf = self.prog.get_uniform("tf").unwrap() as GLint;
         let (w, h) = (width as f32, height as f32);
         let tf = [
-            2.0/w, 0.0, 0.0,
-            0.0, -2.0/h, 0.0,
-            -1.0, 1.0, 1.0,
+            2.0/w,    0.0, 0.0, 0.0,
+              0.0, -2.0/h, 0.0, 0.0,
+              0.0,    0.0, 1.0, 0.0,
+             -1.0,    1.0, 0.0, 1.0,
         ];
         unsafe
         {
             self.gl.Viewport(0, 0, width as GLsizei, height as GLsizei);
-            self.gl.UniformMatrix3fv(loc_tf, 1, gl::FALSE, tf.as_ptr());
-
+            self.gl.UniformMatrix4fv(loc_tf, 1, gl::FALSE, tf.as_ptr());
         }
 
         DrawContext{ surface: surface, gl: self.gl.clone() }
