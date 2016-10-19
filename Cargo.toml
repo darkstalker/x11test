@@ -5,4 +5,5 @@ authors = ["darkstalker <slayerbeast@gmail.com>"]
 
 [dependencies]
 x11 = { version = "2.9.0", features = ["xlib", "xinput"] }
+rand = "0.3.14"
 glengine = { path = "glengine" }
