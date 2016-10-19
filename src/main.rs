@@ -23,7 +23,8 @@ fn main()
         // pull events for this window
         while let Some(ev) = window.consume_event()
         {
-            match ev {
+            match ev
+            {
                 Event::CloseButton | Event::Keyboard(EvState::Pressed, Key::Escape) => break 'main,
                 Event::Keyboard(EvState::Pressed, Key::Insert) => {
                     let win = display.create_window(150, 150).unwrap();
@@ -103,12 +104,19 @@ fn main()
         others.retain(|&(id, ref win)| {
             while let Some(ev) = win.consume_event()
             {
-                println!(">> child {}: {:?}", id, ev);
-                if let Event::CloseButton = ev
+                match ev
                 {
-                    // dropping closes the window
-                    println!(">> closing {}", id);
-                    return false
+                    Event::Redraw => {
+                        let mut ctx = win.draw();
+                        ctx.clear([0.1, 0.1, 0.1, 1.0]);
+                        ctx.draw_triangle(10, 10, 100, 20, 50, 100, [1.0, 1.0, 0.0, 1.0]);
+                    }
+                    Event::CloseButton => {
+                        // dropping closes the window
+                        println!(">> closing {}", id);
+                        return false
+                    }
+                    _ => println!(">> child {}: {:?}", id, ev)
                 }
             }
             true
