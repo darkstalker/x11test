@@ -8,6 +8,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "array_ext"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
 name = "bitflags"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -41,6 +46,7 @@ dependencies = [
 name = "glengine"
 version = "0.1.0"
 dependencies = [
+ "array_ext 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "custom_egl 0.1.0",
  "custom_gl 0.1.0",
 ]
@@ -104,6 +110,7 @@ dependencies = [
 ]
 
 [metadata]
+"checksum array_ext 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "38107ed40db1da71fce0dea08726049014424e7624506d1477dc5476d7cd5e81"
 "checksum bitflags 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)" = "aad18937a628ec6abcd26d1489012cc0e18c21798210f491af69ded9b881106d"
 "checksum gl_generator 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)" = "f1d8edc81c5ae84605a62f5dac661a2313003b26d59839f81d47d46cf0f16a55"
 "checksum khronos 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "135acc871962883a7c2f9af44085e4c56858d4a5a78bfeeec41f9fa3a1ce97c6"

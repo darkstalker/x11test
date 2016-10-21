@@ -1,10 +1,10 @@
+extern crate array_ext;
 extern crate custom_gl as gl;
 extern crate custom_egl as egl;
 
 mod types;
 #[macro_use]
 mod typeinfo;
-mod array;
 mod shader;
 mod eglw;
 
@@ -14,7 +14,7 @@ use std::ffi::CStr;
 use std::ptr;
 use gl::types::*;
 use typeinfo::TypeInfo;
-use array::Array;
+use array_ext::Array;
 use shader::{Shader, Program};
 
 pub use egl::NativeDisplayType;
