@@ -199,40 +199,41 @@ impl<'a> DrawContext<'a>
         }
     }
 
-    pub fn draw_point(&mut self, x: i16, y: i16, color: [f32; 4])
+    pub fn draw_point(&mut self, pos: [i16; 2], color: [f32; 4])
     {
         let tex = self.eng.default_tex;
         self.push_elems(PrimType::Points, tex,
-            &[Vertex{ pos: [x, y], col: color, texc: [0.0, 0.0] }], [0]);
+            &[Vertex{ pos: pos, col: color, texc: [0.0, 0.0] }], [0]);
     }
 
-    pub fn draw_line(&mut self, x0: i16, y0: i16, x1: i16, y1: i16, color: [f32; 4])
+    pub fn draw_line(&mut self, p0: [i16; 2], p1: [i16; 2], color: [f32; 4])
     {
         let tex = self.eng.default_tex;
         self.push_elems(PrimType::Lines, tex, &[
-            Vertex{ pos: [x0, y0], col: color, texc: [0.0, 0.0] },
-            Vertex{ pos: [x1, y1], col: color, texc: [0.0, 0.0] },
+            Vertex{ pos: p0, col: color, texc: [0.0, 0.0] },
+            Vertex{ pos: p1, col: color, texc: [0.0, 0.0] },
         ], [0, 1]);
     }
 
-    pub fn draw_triangle(&mut self, x0: i16, y0: i16, x1: i16, y1: i16, x2: i16, y2: i16, color: [f32; 4])
+    pub fn draw_triangle(&mut self, p0: [i16; 2], p1: [i16; 2], p2: [i16; 2], color: [f32; 4])
     {
         let tex = self.eng.default_tex;
         self.push_elems(PrimType::Triangles, tex, &[
-            Vertex{ pos: [x0, y0], col: color, texc: [0.0, 0.0] },
-            Vertex{ pos: [x1, y1], col: color, texc: [0.0, 0.0] },
-            Vertex{ pos: [x2, y2], col: color, texc: [0.0, 0.0] },
+            Vertex{ pos: p0, col: color, texc: [0.0, 0.0] },
+            Vertex{ pos: p1, col: color, texc: [0.0, 0.0] },
+            Vertex{ pos: p2, col: color, texc: [0.0, 0.0] },
         ], [0, 1, 2]);
     }
 
-    pub fn draw_rect(&mut self, x: i16, y: i16, width: u16, height: u16, color: [f32; 4])
+    pub fn draw_rect(&mut self, pos: [i16; 2], width: u16, height: u16, color: [f32; 4])
     {
+        let (x, y) = (pos[0], pos[1]);
         let xw = x + width as i16;
         let yh = y + height as i16;
         let tex = self.eng.default_tex;
 
         self.push_elems(PrimType::Triangles, tex, &[
-            Vertex{ pos: [ x, y],  col: color, texc: [0.0, 0.0] },
+            Vertex{ pos: pos,      col: color, texc: [0.0, 0.0] },
             Vertex{ pos: [xw, y],  col: color, texc: [0.0, 0.0] },
             Vertex{ pos: [xw, yh], col: color, texc: [0.0, 0.0] },
             Vertex{ pos: [ x, yh], col: color, texc: [0.0, 0.0] },

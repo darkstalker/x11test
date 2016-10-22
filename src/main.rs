@@ -39,7 +39,7 @@ fn main()
                     let mut ctx = window.draw();
                     for _ in 0..1000
                     {
-                        ctx.draw_rect(rng.gen_range(0, w as i16), rng.gen_range(0, h as i16),
+                        ctx.draw_rect([rng.gen_range(0, w as i16), rng.gen_range(0, h as i16)],
                             rng.gen_range(10, 200), rng.gen_range(10, 200),
                             rng.gen());
                     }
@@ -50,8 +50,8 @@ fn main()
                     let mut ctx = window.draw();
                     for _ in 0..1000
                     {
-                        ctx.draw_line(rng.gen_range(0, w as i16), rng.gen_range(0, h as i16),
-                            rng.gen_range(0, w as i16), rng.gen_range(0, h as i16),
+                        ctx.draw_line([rng.gen_range(0, w as i16), rng.gen_range(0, h as i16)],
+                            [rng.gen_range(0, w as i16), rng.gen_range(0, h as i16)],
                             rng.gen());
                     }
                 }
@@ -61,9 +61,9 @@ fn main()
                     let mut ctx = window.draw();
                     for _ in 0..1000
                     {
-                        ctx.draw_triangle(rng.gen_range(0, w as i16), rng.gen_range(0, h as i16),
-                            rng.gen_range(0, w as i16), rng.gen_range(0, h as i16),
-                            rng.gen_range(0, w as i16), rng.gen_range(0, h as i16),
+                        ctx.draw_triangle([rng.gen_range(0, w as i16), rng.gen_range(0, h as i16)],
+                            [rng.gen_range(0, w as i16), rng.gen_range(0, h as i16)],
+                            [rng.gen_range(0, w as i16), rng.gen_range(0, h as i16)],
                             rng.gen());
                     }
                 }
@@ -73,7 +73,7 @@ fn main()
                     let mut ctx = window.draw();
                     for _ in 0..1000
                     {
-                        ctx.draw_point(rng.gen_range(0, w as i16), rng.gen_range(0, h as i16), rng.gen());
+                        ctx.draw_point([rng.gen_range(0, w as i16), rng.gen_range(0, h as i16)], rng.gen());
                     }
                 }
                 Event::Keyboard(EvState::Pressed, Key::Unk(ks)) => {
@@ -86,14 +86,14 @@ fn main()
                 Event::MouseButton(EvState::Pressed, Button::Left, (x, y)) => {
                     mdown = true;
                     let mut ctx = window.draw();
-                    ctx.draw_rect(x as i16 - 5, y as i16 - 5, 10, 10, [1.0, 0.0, 0.0, 1.0]);
+                    ctx.draw_rect([x as i16 - 5, y as i16 - 5], 10, 10, [1.0, 0.0, 0.0, 1.0]);
                 },
                 Event::MouseButton(EvState::Released, Button::Left, _) => {
                     mdown = false;
                 },
                 Event::MouseMoved(x, y) if mdown => {
                     let mut ctx = window.draw();
-                    ctx.draw_rect(x as i16 - 5, y as i16 - 5, 10, 10, [1.0, 0.0, 0.0, 1.0]);
+                    ctx.draw_rect([x as i16 - 5, y as i16 - 5], 10, 10, [1.0, 0.0, 0.0, 1.0]);
                 },
                 //_ => println!(">> main: {:?}", ev)
                 _ => ()
@@ -109,7 +109,7 @@ fn main()
                     Event::Redraw => {
                         let mut ctx = win.draw();
                         ctx.clear([0.1, 0.1, 0.1, 1.0]);
-                        ctx.draw_triangle(10, 10, 100, 20, 50, 100, [1.0, 1.0, 0.0, 1.0]);
+                        ctx.draw_triangle([10, 10], [100, 20], [50, 100], [1.0, 1.0, 0.0, 1.0]);
                     }
                     Event::CloseButton => {
                         // dropping closes the window
