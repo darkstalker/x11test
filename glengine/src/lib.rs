@@ -27,10 +27,10 @@ struct Vertex
 {
     pos: [i16; 2],
     col: [f32; 4],
-    //tex: [f32; 2],
+    texc: [f32; 2],
 }
 
-impl_typeinfo!(Vertex, pos, col);
+impl_typeinfo!(Vertex, pos, col, texc);
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 #[repr(u32)]
@@ -48,6 +48,7 @@ pub struct DrawEngine
     prog: Program,
     vbo_vert: GLuint,
     vbo_idx: GLuint,
+    default_tex: GLuint,
     pub max_verts: usize,
     pub max_idxs: usize,
 }
@@ -94,14 +95,23 @@ impl DrawEngine
             gl.GenBuffers(1, &mut vbo_idx);
             gl.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, vbo_idx);
 
+            // 1x1 white texture
+            let mut tex = 0;
+            gl.GenTextures(1, &mut tex);
+            gl.BindTexture(gl::TEXTURE_2D, tex);
+            gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as GLint);
+            gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
+            gl.TexImage2D(gl::TEXTURE_2D, 0, gl::LUMINANCE as GLint, 1, 1, 0, gl::LUMINANCE, gl::UNSIGNED_BYTE, [255u8].as_ptr() as *const _);
+
             Ok(DrawEngine{
                 egl_disp: egl_disp,
                 gl: gl,
                 prog: prog,
                 vbo_vert: vbo_vert,
                 vbo_idx: vbo_idx,
+                default_tex: tex,
                 // allocate ~1mb per buffer
-                max_verts: 52429,
+                max_verts: 37449,
                 max_idxs: 524288,
             })
         }
@@ -140,7 +150,11 @@ impl Drop for DrawEngine
 {
     fn drop(&mut self)
     {
-        unsafe { self.gl.DeleteBuffers(2, [self.vbo_vert, self.vbo_idx].as_ptr()) };
+        unsafe
+        {
+            self.gl.DeleteBuffers(2, [self.vbo_vert, self.vbo_idx].as_ptr());
+            self.gl.DeleteTextures(1, &self.default_tex);
+        }
     }
 }
 
@@ -152,6 +166,7 @@ pub struct DrawContext<'a>
     ty: PrimType,
     vert_len: usize,
     idx_len: usize,
+    cur_tex: GLuint,
 }
 
 impl<'a> DrawContext<'a>
@@ -165,6 +180,7 @@ impl<'a> DrawContext<'a>
             ty: PrimType::Triangles,
             vert_len: 0,
             idx_len: 0,
+            cur_tex: 0,
         };
 
         dc.alloc_vert();
@@ -185,23 +201,27 @@ impl<'a> DrawContext<'a>
 
     pub fn draw_point(&mut self, x: i16, y: i16, color: [f32; 4])
     {
-        self.push_elems(PrimType::Points, &[Vertex{ pos: [x, y], col: color }], [0]);
+        let tex = self.eng.default_tex;
+        self.push_elems(PrimType::Points, tex,
+            &[Vertex{ pos: [x, y], col: color, texc: [0.0, 0.0] }], [0]);
     }
 
     pub fn draw_line(&mut self, x0: i16, y0: i16, x1: i16, y1: i16, color: [f32; 4])
     {
-        self.push_elems(PrimType::Lines, &[
-            Vertex{ pos: [x0, y0], col: color },
-            Vertex{ pos: [x1, y1], col: color },
+        let tex = self.eng.default_tex;
+        self.push_elems(PrimType::Lines, tex, &[
+            Vertex{ pos: [x0, y0], col: color, texc: [0.0, 0.0] },
+            Vertex{ pos: [x1, y1], col: color, texc: [0.0, 0.0] },
         ], [0, 1]);
     }
 
     pub fn draw_triangle(&mut self, x0: i16, y0: i16, x1: i16, y1: i16, x2: i16, y2: i16, color: [f32; 4])
     {
-        self.push_elems(PrimType::Triangles, &[
-            Vertex{ pos: [x0, y0], col: color },
-            Vertex{ pos: [x1, y1], col: color },
-            Vertex{ pos: [x2, y2], col: color },
+        let tex = self.eng.default_tex;
+        self.push_elems(PrimType::Triangles, tex, &[
+            Vertex{ pos: [x0, y0], col: color, texc: [0.0, 0.0] },
+            Vertex{ pos: [x1, y1], col: color, texc: [0.0, 0.0] },
+            Vertex{ pos: [x2, y2], col: color, texc: [0.0, 0.0] },
         ], [0, 1, 2]);
     }
 
@@ -209,28 +229,36 @@ impl<'a> DrawContext<'a>
     {
         let xw = x + width as i16;
         let yh = y + height as i16;
+        let tex = self.eng.default_tex;
 
-        self.push_elems(PrimType::Triangles, &[
-            Vertex{ pos: [ x, y],  col: color },
-            Vertex{ pos: [xw, y],  col: color },
-            Vertex{ pos: [xw, yh], col: color },
-            Vertex{ pos: [ x, yh], col: color }
+        self.push_elems(PrimType::Triangles, tex, &[
+            Vertex{ pos: [ x, y],  col: color, texc: [0.0, 0.0] },
+            Vertex{ pos: [xw, y],  col: color, texc: [0.0, 0.0] },
+            Vertex{ pos: [xw, yh], col: color, texc: [0.0, 0.0] },
+            Vertex{ pos: [ x, yh], col: color, texc: [0.0, 0.0] },
         ], [
             0, 1, 2,
             2, 3, 0,
         ]);
     }
 
-    fn push_elems<T: Array<u16>>(&mut self, ty: PrimType, verts: &[Vertex], idxs: T)
+    fn push_elems<T: Array<u16>>(&mut self, ty: PrimType, tex: GLuint, verts: &[Vertex], idxs: T)
     {
         assert!(verts.len() <= self.eng.max_verts && idxs.len() <= self.eng.max_idxs);
 
         if self.ty != ty ||
+            self.cur_tex != tex ||
             self.vert_len + verts.len() > self.eng.max_verts ||
             self.idx_len + idxs.len() > self.eng.max_idxs
         {
             self.commit(true);
             self.ty = ty;
+        }
+
+        if self.cur_tex != tex
+        {
+            self.cur_tex = tex;
+            unsafe { self.gl.BindTexture(gl::TEXTURE_2D, tex) };
         }
 
         let vert_size = self.vert_len * mem::size_of::<Vertex>();
