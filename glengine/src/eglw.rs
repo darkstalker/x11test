@@ -3,8 +3,7 @@ use egl::types::*;
 
 use std::mem;
 use std::ptr;
-use std::ffi::{CStr, CString};
-use std::os::raw::c_void;
+use std::ffi::CStr;
 
 pub struct Display
 {
@@ -82,11 +81,13 @@ impl Display
         })
     }
 
+    /*
     pub fn get_proc_address(&self, name: &str) -> *const c_void
     {
         let name_ = CString::new(name).unwrap();
         unsafe { egl::GetProcAddress(name_.as_ptr()) as *const _ }
     }
+    */
 
     pub fn create_window_surface(&self, win: NativeWindowType) -> Result<Surface, &'static str>
     {
