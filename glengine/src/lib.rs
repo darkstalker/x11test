@@ -11,6 +11,7 @@ mod eglw;
 use std::mem;
 use std::ffi::CStr;
 use std::ptr;
+use std::cell::Cell;
 use gl::types::*;
 use typeinfo::TypeInfo;
 use array_ext::Array;
@@ -47,6 +48,12 @@ pub struct DrawEngine
     vbo_vert: GLuint,
     vbo_idx: GLuint,
     default_tex: GLuint,
+    cur_ty: Cell<PrimType>,
+    vert_off: Cell<usize>,
+    idx_off: Cell<usize>,
+    vert_len: Cell<usize>,
+    idx_len: Cell<usize>,
+    cur_tex: Cell<GLuint>,
     pub max_verts: usize,
     pub max_idxs: usize,
 }
@@ -99,16 +106,27 @@ impl DrawEngine
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
             gl::TexImage2D(gl::TEXTURE_2D, 0, gl::LUMINANCE as GLint, 1, 1, 0, gl::LUMINANCE, gl::UNSIGNED_BYTE, [255u8].as_ptr() as *const _);
 
-            Ok(DrawEngine{
+            let eng = DrawEngine{
                 egl_disp: egl_disp,
                 prog: prog,
                 vbo_vert: vbo_vert,
                 vbo_idx: vbo_idx,
                 default_tex: tex,
-                // allocate ~1mb per buffer
-                max_verts: 37449,
-                max_idxs: 524288,
-            })
+                cur_ty: Cell::new(PrimType::Triangles),
+                vert_off: Cell::new(0),
+                idx_off: Cell::new(0),
+                vert_len: Cell::new(0),
+                idx_len: Cell::new(0),
+                cur_tex: Cell::new(0),
+                // allocate 1mb
+                max_verts: 32768,
+                max_idxs: 65536,
+            };
+
+            eng.alloc_vert();
+            eng.alloc_idx();
+
+            Ok(eng)
         }
     }
 
@@ -139,6 +157,84 @@ impl DrawEngine
 
         DrawContext::new(self, surface)
     }
+
+    fn alloc_vert(&self)
+    {
+        self.vert_off.set(0);
+        let size = self.max_verts * mem::size_of::<Vertex>();
+        unsafe { gl::BufferData(gl::ARRAY_BUFFER, size as GLsizeiptr, ptr::null(), gl::STREAM_DRAW) };
+    }
+
+    fn alloc_idx(&self)
+    {
+        self.idx_off.set(0);
+        let size = self.max_idxs * mem::size_of::<u16>();
+        unsafe { gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, size as GLsizeiptr, ptr::null(), gl::STREAM_DRAW) };
+    }
+
+    fn clear(&self, r: f32, g: f32, b: f32, a: f32)
+    {
+        self.vert_len.set(0);
+        self.idx_len.set(0);
+        unsafe
+        {
+            gl::ClearColor(r, g, b, a);
+            gl::Clear(gl::COLOR_BUFFER_BIT);
+        }
+    }
+
+    fn push_elems<T: Array<u16>>(&self, ty: PrimType, tex: Option<GLuint>, verts: &[Vertex], idxs: T)
+    {
+        assert!(verts.len() <= self.max_verts && idxs.len() <= self.max_idxs);
+        let tex = tex.unwrap_or(self.default_tex);
+
+        let vert_start = self.vert_off.get() + self.vert_len.get();
+        let idx_start = self.idx_off.get() + self.idx_len.get();
+
+        let oom_vert = vert_start + verts.len() > self.max_verts;
+        let oom_idx = idx_start + idxs.len() > self.max_idxs;
+        let new_tex = self.cur_tex.get() != tex;
+
+        if oom_vert || oom_idx || new_tex || self.cur_ty.get() != ty
+        {
+            self.commit();
+            self.cur_ty.set(ty);
+
+            if oom_vert { self.alloc_vert(); }
+            if oom_idx { self.alloc_idx(); }
+
+            if new_tex
+            {
+                self.cur_tex.set(tex);
+                unsafe { gl::BindTexture(gl::TEXTURE_2D, tex) };
+            }
+        }
+
+        let vert_size = vert_start * mem::size_of::<Vertex>();
+        let idx_size = idx_start * mem::size_of::<u16>();
+        let idxs = idxs.map(|idx| idx + vert_start as u16);
+        unsafe
+        {
+            gl::BufferSubData(gl::ARRAY_BUFFER, vert_size as GLsizeiptr, mem::size_of_val(verts) as GLintptr, verts.as_ptr() as *const _);
+            gl::BufferSubData(gl::ELEMENT_ARRAY_BUFFER, idx_size as GLsizeiptr, mem::size_of_val(&idxs) as GLintptr, idxs.as_ptr() as *const _);
+        }
+        self.vert_len.set(self.vert_len.get() + verts.len());
+        self.idx_len.set(self.idx_len.get() + idxs.len());
+    }
+
+    fn commit(&self)
+    {
+        if self.vert_len.get() == 0 { return }
+
+        let offset = self.idx_off.get() * mem::size_of::<i16>();
+        unsafe { gl::DrawElements(self.cur_ty.get() as GLenum, self.idx_len.get() as GLsizei, gl::UNSIGNED_SHORT, offset as *const _) };
+
+        self.vert_off.set(self.vert_off.get() + self.vert_len.get());
+        self.idx_off.set(self.idx_off.get() + self.idx_len.get());
+
+        self.vert_len.set(0);
+        self.idx_len.set(0);
+    }
 }
 
 impl Drop for DrawEngine
@@ -157,75 +253,53 @@ pub struct DrawContext<'a>
 {
     eng: &'a DrawEngine,
     surface: &'a Surface<'a>,
-    ty: PrimType,
-    vert_len: usize,
-    idx_len: usize,
-    cur_tex: GLuint,
 }
 
 impl<'a> DrawContext<'a>
 {
     fn new(eng: &'a DrawEngine, surface: &'a Surface) -> Self
     {
-        let dc = DrawContext{
+        DrawContext{
             eng: eng,
             surface: surface,
-            ty: PrimType::Triangles,
-            vert_len: 0,
-            idx_len: 0,
-            cur_tex: 0,
-        };
-
-        dc.alloc_vert();
-        dc.alloc_idx();
-        dc
-    }
-
-    pub fn clear(&mut self, color: [f32; 4])
-    {
-        self.vert_len = 0;
-        self.idx_len = 0;
-        unsafe
-        {
-            gl::ClearColor(color[0], color[1], color[2], color[3]);
-            gl::Clear(gl::COLOR_BUFFER_BIT);
         }
     }
 
-    pub fn draw_point(&mut self, pos: [i16; 2], color: [f32; 4])
+    pub fn clear(&self, color: [f32; 4])
     {
-        let tex = self.eng.default_tex;
-        self.push_elems(PrimType::Points, tex,
+        self.eng.clear(color[0], color[1], color[2], color[3]);
+    }
+
+    pub fn draw_point(&self, pos: [i16; 2], color: [f32; 4])
+    {
+        self.eng.push_elems(PrimType::Points, None,
             &[Vertex{ pos: pos, col: color, texc: [0.0, 0.0] }], [0]);
     }
 
-    pub fn draw_line(&mut self, p0: [i16; 2], p1: [i16; 2], color: [f32; 4])
+    pub fn draw_line(&self, p0: [i16; 2], p1: [i16; 2], color: [f32; 4])
     {
-        let tex = self.eng.default_tex;
-        self.push_elems(PrimType::Lines, tex, &[
+        self.eng.push_elems(PrimType::Lines, None, &[
             Vertex{ pos: p0, col: color, texc: [0.0, 0.0] },
             Vertex{ pos: p1, col: color, texc: [0.0, 0.0] },
         ], [0, 1]);
     }
 
-    pub fn draw_triangle(&mut self, p0: [i16; 2], p1: [i16; 2], p2: [i16; 2], color: [f32; 4])
+    pub fn draw_triangle(&self, p0: [i16; 2], p1: [i16; 2], p2: [i16; 2], color: [f32; 4])
     {
-        let tex = self.eng.default_tex;
-        self.push_elems(PrimType::Triangles, tex, &[
+        self.eng.push_elems(PrimType::Triangles, None, &[
             Vertex{ pos: p0, col: color, texc: [0.0, 0.0] },
             Vertex{ pos: p1, col: color, texc: [0.0, 0.0] },
             Vertex{ pos: p2, col: color, texc: [0.0, 0.0] },
         ], [0, 1, 2]);
     }
 
-    pub fn draw_rect(&mut self, pos: [i16; 2], width: u16, height: u16, color: [f32; 4])
+    pub fn draw_rect(&self, pos: [i16; 2], width: u16, height: u16, color: [f32; 4])
     {
         let (x, y) = (pos[0], pos[1]);
         let xw = x + width as i16;
         let yh = y + height as i16;
-        let tex = self.eng.default_tex;
 
-        self.push_elems(PrimType::Triangles, tex, &[
+        self.eng.push_elems(PrimType::Triangles, None, &[
             Vertex{ pos: pos,      col: color, texc: [0.0, 0.0] },
             Vertex{ pos: [xw, y],  col: color, texc: [0.0, 0.0] },
             Vertex{ pos: [xw, yh], col: color, texc: [0.0, 0.0] },
@@ -235,72 +309,13 @@ impl<'a> DrawContext<'a>
             2, 3, 0,
         ]);
     }
-
-    fn push_elems<T: Array<u16>>(&mut self, ty: PrimType, tex: GLuint, verts: &[Vertex], idxs: T)
-    {
-        assert!(verts.len() <= self.eng.max_verts && idxs.len() <= self.eng.max_idxs);
-
-        if self.ty != ty ||
-            self.cur_tex != tex ||
-            self.vert_len + verts.len() > self.eng.max_verts ||
-            self.idx_len + idxs.len() > self.eng.max_idxs
-        {
-            self.commit(true);
-            self.ty = ty;
-        }
-
-        if self.cur_tex != tex
-        {
-            self.cur_tex = tex;
-            unsafe { gl::BindTexture(gl::TEXTURE_2D, tex) };
-        }
-
-        let vert_size = self.vert_len * mem::size_of::<Vertex>();
-        let idx_size = self.idx_len * mem::size_of::<u16>();
-        let idx_base = self.vert_len as u16;
-        let idx_new = idxs.map(|idx| idx + idx_base);
-        unsafe
-        {
-            gl::BufferSubData(gl::ARRAY_BUFFER, vert_size as GLsizeiptr, mem::size_of_val(verts) as GLintptr, verts.as_ptr() as *const _);
-            gl::BufferSubData(gl::ELEMENT_ARRAY_BUFFER, idx_size as GLsizeiptr, mem::size_of_val(&idx_new) as GLintptr, idx_new.as_ptr() as *const _);
-        }
-        self.vert_len += verts.len();
-        self.idx_len += idx_new.len();
-    }
-
-    fn alloc_vert(&self)
-    {
-        let size = self.eng.max_verts * mem::size_of::<Vertex>();
-        unsafe { gl::BufferData(gl::ARRAY_BUFFER, size as GLsizeiptr, ptr::null(), gl::STREAM_DRAW) };
-    }
-
-    fn alloc_idx(&self)
-    {
-        let size = self.eng.max_idxs * mem::size_of::<u16>();
-        unsafe { gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, size as GLsizeiptr, ptr::null(), gl::STREAM_DRAW) };
-    }
-
-    fn commit(&mut self, realloc: bool)
-    {
-        if self.vert_len == 0 { return }
-
-        unsafe { gl::DrawElements(self.ty as GLenum, self.idx_len as GLsizei, gl::UNSIGNED_SHORT, 0 as *const _) };
-
-        if realloc
-        {
-            self.vert_len = 0;
-            self.idx_len = 0;
-            self.alloc_vert();
-            self.alloc_idx();
-        }
-    }
 }
 
 impl<'a> Drop for DrawContext<'a>
 {
     fn drop(&mut self)
     {
-        self.commit(false);
+        self.eng.commit();
         self.surface.swap_buffers();
     }
 }
