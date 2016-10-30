@@ -211,23 +211,31 @@ impl DrawEngine
         }
 
         let vert_size = vert_start * mem::size_of::<Vertex>();
-        let idx_size = idx_start * mem::size_of::<u16>();
-        let idxs = idxs.map(|idx| idx + vert_start as u16);
-        unsafe
-        {
-            gl::BufferSubData(gl::ARRAY_BUFFER, vert_size as GLsizeiptr, mem::size_of_val(verts) as GLintptr, verts.as_ptr() as *const _);
-            gl::BufferSubData(gl::ELEMENT_ARRAY_BUFFER, idx_size as GLsizeiptr, mem::size_of_val(&idxs) as GLintptr, idxs.as_ptr() as *const _);
-        }
+        unsafe { gl::BufferSubData(gl::ARRAY_BUFFER, vert_size as GLsizeiptr, mem::size_of_val(verts) as GLintptr, verts.as_ptr() as *const _) };
         self.vert_len.set(self.vert_len.get() + verts.len());
-        self.idx_len.set(self.idx_len.get() + idxs.len());
+
+        if !idxs.is_empty()
+        {
+            let idxs = idxs.map(|idx| idx + vert_start as u16);
+            let idx_size = idx_start * mem::size_of::<u16>();
+            unsafe { gl::BufferSubData(gl::ELEMENT_ARRAY_BUFFER, idx_size as GLsizeiptr, mem::size_of_val(&idxs) as GLintptr, idxs.as_ptr() as *const _) };
+            self.idx_len.set(self.idx_len.get() + idxs.len());
+        }
     }
 
     fn commit(&self)
     {
         if self.vert_len.get() == 0 { return }
 
-        let offset = self.idx_off.get() * mem::size_of::<i16>();
-        unsafe { gl::DrawElements(self.cur_ty.get() as GLenum, self.idx_len.get() as GLsizei, gl::UNSIGNED_SHORT, offset as *const _) };
+        if self.cur_ty.get() != PrimType::Points
+        {
+            let offset = self.idx_off.get() * mem::size_of::<i16>();
+            unsafe { gl::DrawElements(self.cur_ty.get() as GLenum, self.idx_len.get() as GLsizei, gl::UNSIGNED_SHORT, offset as *const _) };
+        }
+        else
+        {
+            unsafe { gl::DrawArrays(self.cur_ty.get() as GLenum, self.vert_off.get() as GLint, self.vert_len.get() as GLsizei) };
+        }
 
         self.vert_off.set(self.vert_off.get() + self.vert_len.get());
         self.idx_off.set(self.idx_off.get() + self.idx_len.get());
@@ -273,7 +281,7 @@ impl<'a> DrawContext<'a>
     pub fn draw_point(&self, pos: [i16; 2], color: [f32; 4])
     {
         self.eng.push_elems(PrimType::Points, None,
-            &[Vertex{ pos: pos, col: color, texc: [0.0, 0.0] }], [0]);
+            &[Vertex{ pos: pos, col: color, texc: [0.0, 0.0] }], []);
     }
 
     pub fn draw_line(&self, p0: [i16; 2], p1: [i16; 2], color: [f32; 4])
