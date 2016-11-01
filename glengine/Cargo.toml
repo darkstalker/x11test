@@ -4,6 +4,6 @@ version = "0.1.0"
 authors = ["darkstalker <slayerbeast@gmail.com>"]
 
 [dependencies]
-array_ext = "0.1.0"
+array_ext = "0.2.0"
 custom_egl = { path = "../custom_egl" }
 custom_gl = { path = "../custom_gl" }

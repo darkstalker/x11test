@@ -7,3 +7,4 @@ authors = ["darkstalker <slayerbeast@gmail.com>"]
 x11 = { version = "2.9.0", features = ["xlib", "xinput"] }
 rand = "0.3.14"
 glengine = { path = "glengine" }
+array_ext = "0.2.0"

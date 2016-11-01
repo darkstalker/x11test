@@ -21,7 +21,7 @@ pub use egl::NativeDisplayType;
 pub use egl::NativeWindowType;
 pub use eglw::Surface;
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 struct Vertex
 {
@@ -32,12 +32,13 @@ struct Vertex
 
 impl_typeinfo!(Vertex, pos, col, texc);
 
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[repr(u32)]
 enum PrimType
 {
     Points = gl::POINTS,
     Lines = gl::LINES,
+    LineStrip = gl::LINE_STRIP,
     Triangles = gl::TRIANGLES,
 }
 
@@ -195,7 +196,8 @@ impl DrawEngine
         let oom_idx = idx_start + idxs.len() > self.max_idxs;
         let new_tex = self.cur_tex.get() != tex;
 
-        if oom_vert || oom_idx || new_tex || self.cur_ty.get() != ty
+        if oom_vert || oom_idx || new_tex || self.cur_ty.get() != ty ||
+            self.cur_ty.get() == PrimType::LineStrip  // close the previous line strip
         {
             self.commit();
             self.cur_ty.set(ty);
@@ -216,7 +218,7 @@ impl DrawEngine
 
         if !idxs.is_empty()
         {
-            let idxs = idxs.map(|idx| idx + vert_start as u16);
+            let idxs = idxs.map_(|idx| idx + vert_start as u16);
             let idx_size = idx_start * mem::size_of::<u16>();
             unsafe { gl::BufferSubData(gl::ELEMENT_ARRAY_BUFFER, idx_size as GLsizeiptr, mem::size_of_val(&idxs) as GLintptr, idxs.as_ptr() as *const _) };
             self.idx_len.set(self.idx_len.get() + idxs.len());
@@ -227,14 +229,15 @@ impl DrawEngine
     {
         if self.vert_len.get() == 0 { return }
 
-        if self.cur_ty.get() != PrimType::Points
+        match self.cur_ty.get()
         {
-            let offset = self.idx_off.get() * mem::size_of::<i16>();
-            unsafe { gl::DrawElements(self.cur_ty.get() as GLenum, self.idx_len.get() as GLsizei, gl::UNSIGNED_SHORT, offset as *const _) };
-        }
-        else
-        {
-            unsafe { gl::DrawArrays(self.cur_ty.get() as GLenum, self.vert_off.get() as GLint, self.vert_len.get() as GLsizei) };
+            PrimType::Triangles | PrimType::Lines => {
+                let offset = self.idx_off.get() * mem::size_of::<i16>();
+                unsafe { gl::DrawElements(self.cur_ty.get() as GLenum, self.idx_len.get() as GLsizei, gl::UNSIGNED_SHORT, offset as *const _) };
+            }
+            _ => {
+                unsafe { gl::DrawArrays(self.cur_ty.get() as GLenum, self.vert_off.get() as GLint, self.vert_len.get() as GLsizei) };
+            }
         }
 
         self.vert_off.set(self.vert_off.get() + self.vert_len.get());
@@ -290,6 +293,12 @@ impl<'a> DrawContext<'a>
             Vertex{ pos: p0, col: color, texc: [0.0, 0.0] },
             Vertex{ pos: p1, col: color, texc: [0.0, 0.0] },
         ], [0, 1]);
+    }
+
+    pub fn draw_polyline(&self, ps: &[[i16; 2]], color: [f32; 4])
+    {
+        let verts: Vec<_> = ps.iter().map(|&p| Vertex{ pos: p, col: color, texc: [0.0, 0.0] }).collect();
+        self.eng.push_elems(PrimType::LineStrip, None, &verts, []);
     }
 
     pub fn draw_triangle(&self, p0: [i16; 2], p1: [i16; 2], p2: [i16; 2], color: [f32; 4])

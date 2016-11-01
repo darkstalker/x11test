@@ -1,7 +1,24 @@
 extern crate x11test;
 extern crate rand;
+extern crate array_ext;
 use x11test::{XDisplay, Event, EvState, Key, Button};
 use rand::Rng;
+use array_ext::*;
+
+fn lerp(va: [f32; 2], vb: [f32; 2], t: f32) -> [f32; 2]
+{
+    va.zip(vb, |a, b| a + (b - a) * t)
+}
+
+fn bezier(t: f32, p: [[f32; 2]; 4]) -> [f32; 2]
+{
+    let ab = lerp(p[0], p[1], t);
+    let bc = lerp(p[1], p[2], t);
+    let cd = lerp(p[2], p[3], t);
+    let abbc = lerp(ab, bc, t);
+    let bccd = lerp(bc, cd, t);
+    lerp(abbc, bccd, t)
+}
 
 fn main()
 {
@@ -75,6 +92,24 @@ fn main()
                     {
                         ctx.draw_point([rng.gen_range(0, w as i16), rng.gen_range(0, h as i16)], rng.gen());
                     }
+                }
+                Event::Keyboard(EvState::Pressed, Key::T) => {
+                    let (w, h) = window.get_size();
+                    let mut rng = rand::thread_rng();
+                    // control points
+                    let bez_pts = rng.gen::<[[f32; 2]; 4]>().map(|p| [p[0] * w as f32, p[1] * h as f32]);
+                    // interpolated points
+                    let mut pts = Vec::with_capacity(10);
+                    let mut t = 0.0;
+                    for _ in 0 .. 40
+                    {
+                        pts.push(bezier(t, bez_pts).map(|v| v as i16));
+                        t += 0.025;
+                    }
+
+                    let ctx = window.draw();
+                    ctx.draw_polyline(&bez_pts.map(|p| p.map(|v| v as i16)), [0.0, 0.0, 0.5, 1.0]);
+                    ctx.draw_polyline(&pts, [1.0, 1.0, 1.0, 1.0]);
                 }
                 Event::Keyboard(EvState::Pressed, Key::Key1) => {
                     let (w, h) = window.get_size();
