@@ -260,6 +260,9 @@ impl Drop for DrawEngine
     }
 }
 
+pub type Point = [i16; 2];
+pub type Color = [f32; 4];
+
 pub struct DrawContext<'a>
 {
     eng: &'a DrawEngine,
@@ -276,18 +279,18 @@ impl<'a> DrawContext<'a>
         }
     }
 
-    pub fn clear(&self, color: [f32; 4])
+    pub fn clear(&self, color: Color)
     {
         self.eng.clear(color[0], color[1], color[2], color[3]);
     }
 
-    pub fn draw_point(&self, pos: [i16; 2], color: [f32; 4])
+    pub fn draw_point(&self, pos: Point, color: Color)
     {
         self.eng.push_elems(PrimType::Points, None,
             &[Vertex{ pos: pos, col: color, texc: [0.0, 0.0] }], []);
     }
 
-    pub fn draw_line(&self, p0: [i16; 2], p1: [i16; 2], color: [f32; 4])
+    pub fn draw_line(&self, p0: Point, p1: Point, color: Color)
     {
         self.eng.push_elems(PrimType::Lines, None, &[
             Vertex{ pos: p0, col: color, texc: [0.0, 0.0] },
@@ -295,13 +298,13 @@ impl<'a> DrawContext<'a>
         ], [0, 1]);
     }
 
-    pub fn draw_polyline(&self, ps: &[[i16; 2]], color: [f32; 4])
+    pub fn draw_polyline(&self, ps: &[Point], color: Color)
     {
         let verts: Vec<_> = ps.iter().map(|&p| Vertex{ pos: p, col: color, texc: [0.0, 0.0] }).collect();
         self.eng.push_elems(PrimType::LineStrip, None, &verts, []);
     }
 
-    pub fn draw_triangle(&self, p0: [i16; 2], p1: [i16; 2], p2: [i16; 2], color: [f32; 4])
+    pub fn draw_triangle(&self, p0: Point, p1: Point, p2: Point, color: Color)
     {
         self.eng.push_elems(PrimType::Triangles, None, &[
             Vertex{ pos: p0, col: color, texc: [0.0, 0.0] },
@@ -310,7 +313,7 @@ impl<'a> DrawContext<'a>
         ], [0, 1, 2]);
     }
 
-    pub fn draw_rect(&self, pos: [i16; 2], width: u16, height: u16, color: [f32; 4])
+    pub fn draw_rect(&self, pos: Point, width: u16, height: u16, color: Color)
     {
         let (x, y) = (pos[0], pos[1]);
         let xw = x + width as i16;
