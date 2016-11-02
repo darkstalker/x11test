@@ -163,14 +163,14 @@ impl DrawEngine
     {
         self.vert_off.set(0);
         let size = self.max_verts * mem::size_of::<Vertex>();
-        unsafe { gl::BufferData(gl::ARRAY_BUFFER, size as GLsizeiptr, ptr::null(), gl::STREAM_DRAW) };
+        unsafe { gl::BufferData(gl::ARRAY_BUFFER, size as GLsizeiptr, ptr::null(), gl::DYNAMIC_DRAW) };
     }
 
     fn alloc_idx(&self)
     {
         self.idx_off.set(0);
         let size = self.max_idxs * mem::size_of::<u16>();
-        unsafe { gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, size as GLsizeiptr, ptr::null(), gl::STREAM_DRAW) };
+        unsafe { gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, size as GLsizeiptr, ptr::null(), gl::DYNAMIC_DRAW) };
     }
 
     fn clear(&self, r: f32, g: f32, b: f32, a: f32)
