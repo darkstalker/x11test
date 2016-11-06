@@ -32,16 +32,6 @@ struct Vertex
 
 impl_typeinfo!(Vertex, pos, col, texc);
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-#[repr(u32)]
-enum PrimType
-{
-    Points = gl::POINTS,
-    Lines = gl::LINES,
-    LineStrip = gl::LINE_STRIP,
-    Triangles = gl::TRIANGLES,
-}
-
 pub struct DrawEngine
 {
     egl_disp: eglw::Display,
@@ -49,7 +39,6 @@ pub struct DrawEngine
     vbo_vert: GLuint,
     vbo_idx: GLuint,
     default_tex: GLuint,
-    cur_ty: Cell<PrimType>,
     vert_off: Cell<usize>,
     idx_off: Cell<usize>,
     vert_len: Cell<usize>,
@@ -113,7 +102,6 @@ impl DrawEngine
                 vbo_vert: vbo_vert,
                 vbo_idx: vbo_idx,
                 default_tex: tex,
-                cur_ty: Cell::new(PrimType::Triangles),
                 vert_off: Cell::new(0),
                 idx_off: Cell::new(0),
                 vert_len: Cell::new(0),
@@ -184,7 +172,7 @@ impl DrawEngine
         }
     }
 
-    fn push_elems<T: Array<u16>>(&self, ty: PrimType, tex: Option<GLuint>, verts: &[Vertex], idxs: T)
+    fn push_elems<T: Array<u16>>(&self, tex: Option<GLuint>, verts: &[Vertex], idxs: T)
     {
         assert!(verts.len() <= self.max_verts && idxs.len() <= self.max_idxs);
         let tex = tex.unwrap_or(self.default_tex);
@@ -196,11 +184,9 @@ impl DrawEngine
         let oom_idx = idx_start + idxs.len() > self.max_idxs;
         let new_tex = self.cur_tex.get() != tex;
 
-        if oom_vert || oom_idx || new_tex || self.cur_ty.get() != ty ||
-            self.cur_ty.get() == PrimType::LineStrip  // close the previous line strip
+        if oom_vert || oom_idx || new_tex
         {
             self.commit();
-            self.cur_ty.set(ty);
 
             if oom_vert { self.alloc_vert(); }
             if oom_idx { self.alloc_idx(); }
@@ -216,29 +202,18 @@ impl DrawEngine
         unsafe { gl::BufferSubData(gl::ARRAY_BUFFER, vert_size as GLsizeiptr, mem::size_of_val(verts) as GLintptr, verts.as_ptr() as *const _) };
         self.vert_len.set(self.vert_len.get() + verts.len());
 
-        if !idxs.is_empty()
-        {
-            let idxs = idxs.map_(|idx| idx + vert_start as u16);
-            let idx_size = idx_start * mem::size_of::<u16>();
-            unsafe { gl::BufferSubData(gl::ELEMENT_ARRAY_BUFFER, idx_size as GLsizeiptr, mem::size_of_val(&idxs) as GLintptr, idxs.as_ptr() as *const _) };
-            self.idx_len.set(self.idx_len.get() + idxs.len());
-        }
+        let idxs = idxs.map_(|idx| idx + vert_start as u16);
+        let idx_size = idx_start * mem::size_of::<u16>();
+        unsafe { gl::BufferSubData(gl::ELEMENT_ARRAY_BUFFER, idx_size as GLsizeiptr, mem::size_of_val(&idxs) as GLintptr, idxs.as_ptr() as *const _) };
+        self.idx_len.set(self.idx_len.get() + idxs.len());
     }
 
     fn commit(&self)
     {
         if self.vert_len.get() == 0 { return }
 
-        match self.cur_ty.get()
-        {
-            PrimType::Triangles | PrimType::Lines => {
-                let offset = self.idx_off.get() * mem::size_of::<i16>();
-                unsafe { gl::DrawElements(self.cur_ty.get() as GLenum, self.idx_len.get() as GLsizei, gl::UNSIGNED_SHORT, offset as *const _) };
-            }
-            _ => {
-                unsafe { gl::DrawArrays(self.cur_ty.get() as GLenum, self.vert_off.get() as GLint, self.vert_len.get() as GLsizei) };
-            }
-        }
+        let offset = self.idx_off.get() * mem::size_of::<i16>();
+        unsafe { gl::DrawElements(gl::TRIANGLES, self.idx_len.get() as GLsizei, gl::UNSIGNED_SHORT, offset as *const _) };
 
         self.vert_off.set(self.vert_off.get() + self.vert_len.get());
         self.idx_off.set(self.idx_off.get() + self.idx_len.get());
@@ -284,12 +259,7 @@ impl<'a> DrawContext<'a>
         self.eng.clear(color[0], color[1], color[2], color[3]);
     }
 
-    pub fn draw_point(&self, pos: Point, color: Color)
-    {
-        self.eng.push_elems(PrimType::Points, None,
-            &[Vertex{ pos: pos, col: color, texc: [0.0, 0.0] }], []);
-    }
-
+    /*
     pub fn draw_line(&self, p0: Point, p1: Point, color: Color)
     {
         self.eng.push_elems(PrimType::Lines, None, &[
@@ -303,10 +273,11 @@ impl<'a> DrawContext<'a>
         let verts: Vec<_> = ps.iter().map(|&p| Vertex{ pos: p, col: color, texc: [0.0, 0.0] }).collect();
         self.eng.push_elems(PrimType::LineStrip, None, &verts, []);
     }
+    */
 
     pub fn draw_triangle(&self, p0: Point, p1: Point, p2: Point, color: Color)
     {
-        self.eng.push_elems(PrimType::Triangles, None, &[
+        self.eng.push_elems(None, &[
             Vertex{ pos: p0, col: color, texc: [0.0, 0.0] },
             Vertex{ pos: p1, col: color, texc: [0.0, 0.0] },
             Vertex{ pos: p2, col: color, texc: [0.0, 0.0] },
@@ -319,7 +290,7 @@ impl<'a> DrawContext<'a>
         let xw = x + width as i16;
         let yh = y + height as i16;
 
-        self.eng.push_elems(PrimType::Triangles, None, &[
+        self.eng.push_elems(None, &[
             Vertex{ pos: pos,      col: color, texc: [0.0, 0.0] },
             Vertex{ pos: [xw, y],  col: color, texc: [0.0, 0.0] },
             Vertex{ pos: [xw, yh], col: color, texc: [0.0, 0.0] },
