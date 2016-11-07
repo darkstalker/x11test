@@ -10,12 +10,12 @@ pub trait TypeInfo
 macro_rules! impl_typeinfo
 {
     ($t:ty, $($field:ident),+) => (
-        impl ::typeinfo::TypeInfo for $t
+        impl $crate::typeinfo::TypeInfo for $t
         {
             fn visit_fields<F>(cb: F)
                 where F: Fn(&str, usize, usize, ::types::GlTypeEnum)
             {
-                use ::types::{GlType, ElemCount, GlTypeEnum};
+                use $crate::types::{GlType, ElemCount, GlTypeEnum};
                 // we need this to extract the type from a struct field
                 fn gltype<T: GlType>(_v: &T) -> GlTypeEnum { T::get_gl_type() }
                 fn elem_count<T: ElemCount>(_v: &T) -> usize { T::get_elem_count() }
