@@ -13,6 +13,14 @@ fn main()
     window.set_title("main");
     window.show();
 
+    let tex = display.create_texture(2, 2);
+    tex.update(0, 0, 2, 2,&[
+        255, 0, 0, 255,
+        0, 255, 0, 255,
+        0, 0, 255, 255,
+        255, 255, 255, 255,
+    ]);
+
     let mut others = Vec::new();
     let mut n = 1;
     let mut mdown = false;
@@ -43,7 +51,7 @@ fn main()
                     {
                         ctx.draw_rect(size.map(|n| rng.gen_range(0, n as i16)),
                             rng.gen_range(10, 200), rng.gen_range(10, 200),
-                            rng.gen());
+                            rng.gen::<[f32; 4]>());
                     }
                 }
                 Event::Keyboard(EvState::Pressed, Key::W) => {
@@ -55,7 +63,7 @@ fn main()
                         ctx.draw_triangle(size.map(|n| rng.gen_range(0, n as i16)),
                             size.map(|n| rng.gen_range(0, n as i16)),
                             size.map(|n| rng.gen_range(0, n as i16)),
-                            rng.gen());
+                            rng.gen::<[f32; 4]>());
                     }
                 }
                 Event::Keyboard(EvState::Pressed, Key::Unk(ks)) => {
@@ -68,14 +76,14 @@ fn main()
                 Event::MouseButton(EvState::Pressed, Button::Left, (x, y)) => {
                     mdown = true;
                     let ctx = window.draw();
-                    ctx.draw_rect([x as i16 - 5, y as i16 - 5], 10, 10, [1.0, 0.0, 0.0, 1.0]);
+                    ctx.draw_rect([x as i16 - 5, y as i16 - 5], 10, 10, &tex);
                 }
                 Event::MouseButton(EvState::Released, Button::Left, _) => {
                     mdown = false;
                 }
                 Event::MouseMoved(x, y) if mdown => {
                     let ctx = window.draw();
-                    ctx.draw_rect([x as i16 - 5, y as i16 - 5], 10, 10, [1.0, 0.0, 0.0, 1.0]);
+                    ctx.draw_rect([x as i16 - 5, y as i16 - 5], 10, 10, &tex);
                 }
                 //_ => println!(">> main: {:?}", ev)
                 _ => ()

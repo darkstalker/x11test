@@ -332,6 +332,11 @@ impl XDisplay
         XWindow::new(self, width, height)
     }
 
+    pub fn create_texture(&self, width: u32, height: u32) -> glengine::Texture
+    {
+        glengine::Texture::new(&self.engine, width, height)
+    }
+
     pub fn wait_event(&self)
     {
         let mut xevent = unsafe { mem::zeroed() };
