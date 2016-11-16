@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["darkstalker <slayerbeast@gmail.com>"]
 
 [dependencies]
-x11 = { version = "2.9.0", features = ["xlib", "xinput"] }
+x11 = { version = "2.11.0", features = ["xlib", "xinput"] }
 rand = "0.3.14"
-glengine = { path = "glengine" }
 array_ext = "0.2.0"
+glengine = { path = "glengine" }
