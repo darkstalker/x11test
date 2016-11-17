@@ -53,7 +53,7 @@ impl DrawEngine
 {
     pub fn new(xdisp: NativeDisplayType) -> Result<Self, &'static str>
     {
-        let egl_disp = try!(eglw::Display::new(xdisp));
+        let egl_disp = eglw::Display::new(xdisp)?;
 
         unsafe
         {

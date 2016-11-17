@@ -262,7 +262,7 @@ impl XDisplay
         }
 
         // this initializes EGL and the GL context
-        let engine = try!(glengine::DrawEngine::new(display as _));
+        let engine = glengine::DrawEngine::new(display as _)?;
 
         let mut xdis = XDisplay{
             handle: display,
@@ -811,7 +811,7 @@ impl<'a> XWindow<'a>
             win_id
         };
 
-        let surface = try!(display.engine.create_window_surface(win_id as _));
+        let surface = display.engine.create_window_surface(win_id as _)?;
 
         let data = Default::default();
         display.win_data.borrow_mut().insert(win_id, Rc::downgrade(&data));
