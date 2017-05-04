@@ -256,7 +256,7 @@ impl XDisplay
     {
         // open display
         let display = unsafe{ xlib::XOpenDisplay(ptr::null()) };
-        if display == ptr::null_mut()
+        if display.is_null()
         {
             return Err("Can't open display")
         }
@@ -279,7 +279,7 @@ impl XDisplay
                               b"Abs Pressure\0".as_ptr() as *mut _,
                               b"Abs Tilt X\0".as_ptr() as *mut _,
                               b"Abs Tilt Y\0".as_ptr() as *mut _];
-        if unsafe { xlib::XInternAtoms(display, &mut atom_names[0], atom_names.len() as i32, xlib::False, mem::transmute(&mut xdis.atoms)) } == 0
+        if unsafe { xlib::XInternAtoms(display, &mut atom_names[0], atom_names.len() as i32, xlib::False, &mut xdis.atoms as *mut AtomCache as *mut _) } == 0
         {
             return Err("Can't intern atoms")
         }
@@ -472,7 +472,7 @@ impl XDisplay
 
     fn parse_xinput_event(&self, ev: &xlib::XGenericEventCookie) -> (xlib::Window, ParsedEvent)
     {
-        let ev_data: &xinput2::XIDeviceEvent = unsafe { mem::transmute(ev.data) };
+        let ev_data: &xinput2::XIDeviceEvent = unsafe { &*(ev.data as *const _) };
 
         (ev_data.event, match ev.evtype {
             /*xinput2::XI_DeviceChanged => {
@@ -514,7 +514,7 @@ impl XDisplay
                 let mut cur_offset = 0;
                 for axis_id in 0 .. dev_info.num_axis
                 {
-                    if xinput2::XIMaskIsSet(&axis_mask, axis_id)
+                    if xinput2::XIMaskIsSet(axis_mask, axis_id)
                     {
                         let axis_value = unsafe { *axis_state.values.offset(cur_offset) };
                         if let Some(axis_info) = dev_info.axis_info.get_mut(&axis_id)
@@ -590,7 +590,7 @@ impl XDisplay
                 ParsedEvent::Many(events)
             },
             xinput2::XI_HierarchyChanged => {
-                let ev_data: &xinput2::XIHierarchyEvent = unsafe { mem::transmute(ev.data) };
+                let ev_data: &xinput2::XIHierarchyEvent = unsafe { &*(ev.data as *const _) };
                 let ev_info = unsafe { slice::from_raw_parts(ev_data.info, ev_data.num_info as usize) };
 
                 if ev_data.flags & (xinput2::XIDeviceEnabled | xinput2::XIDeviceDisabled) != 0
@@ -642,7 +642,7 @@ impl XDisplay
 
                     let (ax_num, ax_data) = match ctype {
                         xinput2::XIValuatorClass => {
-                            let ci: &xinput2::XIValuatorClassInfo = unsafe { mem::transmute(class) };
+                            let ci: &xinput2::XIValuatorClassInfo = unsafe { &*(class as *const _) };
                             println!("valuator {}: mode={} min={} max={} val={}", ci.number, ci.mode, ci.min, ci.max, ci.value);
                             // we're gonna assume valuators appear before scroll classes, so we can store them here ...
                             values[ci.number as usize] = ci.value;
@@ -657,7 +657,7 @@ impl XDisplay
                             (ci.number, AxisData{ axis_type: ax_type, value: ci.value })
                         },
                         xinput2::XIScrollClass => {
-                            let ci: &xinput2::XIScrollClassInfo = unsafe { mem::transmute(class) };
+                            let ci: &xinput2::XIScrollClassInfo = unsafe { &*(class as *const _) };
                             println!("scroll {}: type={} incr={} flags={}", ci.number, ci.scroll_type, ci.increment, ci.flags);
                             has_scroll = true;
                             // ... and use them here to fill in the scroll classes
@@ -675,7 +675,7 @@ impl XDisplay
                     };
 
                     let mut devices = self.devices.borrow_mut();
-                    let dev_info = devices.entry(dev.deviceid).or_insert_with(|| Default::default());
+                    let dev_info = devices.entry(dev.deviceid).or_insert_with(Default::default);
                     dev_info.axis_info.insert(ax_num, ax_data);
                     dev_info.has_scroll = has_scroll;
                     // store the highest axis id we need to read from events
